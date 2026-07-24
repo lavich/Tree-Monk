@@ -1,4 +1,3 @@
-import { existsSync } from 'fs'
 import { DismissedIssues, Families, People } from './repo'
 import { getDb } from './connection'
 import type { Person, SanityFix, SanityIssue } from '@shared/types'
@@ -172,8 +171,12 @@ function hasBadWhitespace(s: string | null): boolean {
  * data-entry mistakes. Every check is PRECISION-AWARE (year-only dates never
  * false-flag against precise ones) and BOUNDED (fires only on genuine anomalies,
  * so the list stays short even on very large trees).
+ *
+ * `fileExists` is injected by the caller (the main process passes `fs.existsSync`)
+ * so THIS module never imports `fs` — that keeps it bundleable for the browser
+ * demo, which simply omits the missing-media-file check (it has no local files).
  */
-export function runSanityCheck(): SanityIssue[] {
+export function runSanityCheck(fileExists?: (path: string) => boolean): SanityIssue[] {
   counter = 0
   const people = People.list()
   const families = Families.list()
@@ -713,13 +716,14 @@ export function runSanityCheck(): SanityIssue[] {
     }
   }
 
-  // ---- missing / broken media files ----
-  for (const doc of db
-    .prepare('SELECT id, title, file_path FROM documents')
-    .all() as { id: string; title: string; file_path: string }[]) {
-    const fp = doc.file_path || ''
-    if (!fp || /^(https?|data):/i.test(fp)) continue // remote links / data URLs aren't files
-    if (existsSync(fp)) continue
+  // ---- missing / broken media files (only when the caller can touch the FS) ----
+  if (fileExists)
+    for (const doc of db
+      .prepare('SELECT id, title, file_path FROM documents')
+      .all() as { id: string; title: string; file_path: string }[]) {
+      const fp = doc.file_path || ''
+      if (!fp || /^(https?|data):/i.test(fp)) continue // remote links / data URLs aren't files
+      if (fileExists(fp)) continue
     const linked = (
       db.prepare('SELECT person_id FROM person_documents WHERE document_id = ?').all(doc.id) as {
         person_id: string

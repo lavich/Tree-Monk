@@ -401,7 +401,7 @@ export function registerIpc(): void {
   )
 
   // Sanity check
-  ipcMain.handle(Channels.sanity.check, () => runSanityCheck())
+  ipcMain.handle(Channels.sanity.check, () => runSanityCheck(existsSync))
   ipcMain.handle(Channels.sanity.dismiss, (_e, key: string) => DismissedIssues.add(key))
 
   // Relationship finder (kinship path between two people)
