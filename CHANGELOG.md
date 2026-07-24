@@ -2,6 +2,41 @@
 
 All notable changes to TreeMonk are documented here.
 
+## [1.8.13]
+
+### Added
+- **Accessibility panel** (left sidebar flyout): contrast (incl. a high-contrast
+  mode via a `.hc` class), font size, animations and reduce-effects toggles.
+- **Photo region (face) tags**: draw a zone on a document image and link it to a
+  person; regions are normalized (0..1) so they survive any display size, shown
+  as boxes with names, click-to-open in the viewer. Cropping a **profile photo**
+  auto-creates the matching region; profile photos can now be **removed**.
+- **Selectable fonts for the fan / circle chart** — 20+ self-hosted woff2
+  families (Latin + Latin-Extended), loaded locally (no CDN) and embedded into
+  the exported SVG/PDF.
+- **Map label localization**: base-map place names follow the chosen app
+  language; the atlas control rail is collapsible.
+- Data issues: ~24 new checks (event-after-death / before-birth, christening
+  logic, unparsable/typo dates, marriage before-birth / too-young / age-gap /
+  duplicate-couple / married-relative, parent-too-old, child-before-marriage,
+  too-many-children, sibling-same-name, name affix/whitespace, married-name-as-
+  maiden, sex-role mismatch, missing sex, own-ancestor loop, disconnected
+  person, parentless family, missing media file) + a "notice" severity, plus
+  one-click fixes (swap parents / move to the correct parent slot).
+
+### Changed
+- Settings page redesigned (left-rail tabs); "What's new" moved into Settings.
+- Date DISPLAY now normalizes non-ISO stored dates (GEDCOM/legacy free-form)
+  before formatting, so existing/imported dates reformat to the chosen format
+  immediately — no focus/blur round-trip needed.
+
+### Fixed
+- CSV import: whole-file, quote-aware parse (embedded delimiters/newlines).
+- GEDCOM: christening-type EVEN exact-anchored; per-parent child relations
+  preserved through re-writes; anonymized-living children no longer leak
+  adoption/foster/step facts.
+- Given-names editor: Backspace-to-edit no longer wipes the draft.
+
 ## [1.8.12]
 
 ### Added

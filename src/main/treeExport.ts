@@ -187,6 +187,11 @@ function htmlToPdf(html: string): Promise<Buffer> {
     writeFileSync(htmlPath, html, 'utf-8')
     try {
       await win.loadFile(htmlPath)
+      // Wait for embedded (base64) @font-face resources to finish loading, so a
+      // chosen chart font actually applies instead of falling back.
+      await win.webContents
+        .executeJavaScript('document.fonts && document.fonts.ready ? document.fonts.ready.then(() => true) : true')
+        .catch(() => undefined)
       // Let embedded avatar data-URLs decode and lay out before snapshotting.
       await new Promise((resolve) => setTimeout(resolve, 350))
       return await win.webContents.printToPDF({

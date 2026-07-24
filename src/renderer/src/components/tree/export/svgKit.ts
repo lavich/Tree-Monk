@@ -69,6 +69,11 @@ export interface ExportContent {
   ink: string
   muted: string
   border: string
+  /** Fan chart: CSS font-family for the labels (undefined = poster default). */
+  fanFontFamily?: string
+  /** Fan chart: an @font-face block (base64 woff2) embedded so the chosen font
+   *  renders in the standalone export/PDF with no CDN or system dependency. */
+  fanFontFaceCss?: string
 }
 
 const XML_ESC: Record<string, string> = {

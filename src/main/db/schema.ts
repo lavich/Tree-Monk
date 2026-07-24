@@ -340,6 +340,24 @@ CREATE TABLE IF NOT EXISTS support_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_support_messages_at ON support_messages(created_at);
 
+-- Photo regions (face tags): a rectangular zone on a document/photo linked to a
+-- person (or just a free-text label). Coordinates are normalised 0..1 fractions
+-- of the image so they survive any display size. Additive → existing DBs gain it
+-- on the next launch (CREATE TABLE IF NOT EXISTS).
+CREATE TABLE IF NOT EXISTS photo_regions (
+  id          TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  person_id   TEXT REFERENCES people(id) ON DELETE CASCADE,  -- NULL = label-only tag
+  label       TEXT,                                          -- free label when no person
+  x           REAL NOT NULL,                                 -- left   (0..1)
+  y           REAL NOT NULL,                                 -- top    (0..1)
+  w           REAL NOT NULL,                                 -- width  (0..1)
+  h           REAL NOT NULL,                                 -- height (0..1)
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_photo_regions_document ON photo_regions(document_id);
+CREATE INDEX IF NOT EXISTS idx_photo_regions_person ON photo_regions(person_id);
+
 CREATE INDEX IF NOT EXISTS idx_aliases_person ON aliases(person_id);
 CREATE INDEX IF NOT EXISTS idx_occupations_person ON occupations(person_id);
 CREATE INDEX IF NOT EXISTS idx_events_owner ON events(owner_type, owner_id);

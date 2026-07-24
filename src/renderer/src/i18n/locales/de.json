@@ -20,6 +20,7 @@
     "dragHint": "Zum Positionieren ziehen, mit dem Regler zoomen.",
     "reset": "Auf Mitte zurücksetzen",
     "replace": "Foto ersetzen",
+    "remove": "Foto entfernen",
     "none": "Kein Foto hochgeladen."
   },
   "places": {
@@ -714,14 +715,43 @@
       "birthInFuture": "Geburtsdatum in der Zukunft",
       "parentBornAfterChild": "Elternteil nach dem Kind geboren",
       "burialBeforeDeath": "Bestattung vor dem Tod",
-      "burialLongAfterDeath": "Bestattung lange nach dem Tod"
+      "burialLongAfterDeath": "Bestattung lange nach dem Tod",
+      "christeningBeforeBirth": "Taufe vor der Geburt",
+      "christeningLongAfterBirth": "Taufe lange nach der Geburt",
+      "deathInFuture": "Sterbedatum in der Zukunft",
+      "missingSex": "Geschlecht nicht erfasst",
+      "nameHasAffix": "Titel/Namenszusatz im Namensfeld",
+      "nameWhitespace": "Überflüssige Leerzeichen im Namen",
+      "unparsableDate": "Unlesbares Datum",
+      "eventAfterDeath": "Ereignis nach dem Tod",
+      "eventBeforeBirth": "Ereignis vor der Geburt",
+      "ownAncestor": "Person ist ihr eigener Vorfahre",
+      "disconnected": "Mit niemandem verbunden",
+      "duplicateCouple": "Dasselbe Paar doppelt erfasst",
+      "sexRoleMismatch": "Geschlecht passt nicht zur Elternrolle",
+      "marriedRelative": "Mit nahem Verwandten verheiratet",
+      "spouseAgeGap": "Großer Altersunterschied der Ehepartner",
+      "marriedNameAsMaiden": "Ehename als Geburtsname erfasst",
+      "marriedBeforeBirth": "Heirat vor der Geburt",
+      "marriedTooYoung": "Sehr jung geheiratet",
+      "tooManyChildren": "Ungewöhnlich viele Kinder",
+      "parentlessFamily": "Familie ohne Eltern",
+      "childBeforeMarriage": "Kind vor der Heirat geboren",
+      "parentTooOld": "Elternteil ungewöhnlich alt bei der Geburt",
+      "siblingSameName": "Geschwister mit gleichem Vornamen",
+      "missingMediaFile": "Fehlende Mediendatei",
+      "parentsSwapped": "Eltern vertauscht (Mann/Frau vertauscht)"
     },
     "fix": {
       "markDeceased": "Als verstorben markieren",
       "markDeceasedTitle": "Als verstorben markieren",
       "markDeceasedConfirm": "Als verstorben markieren",
       "deathDateOptional": "Sterbedatum (optional)",
-      "markDeceasedBody": "{{name}} als verstorben markieren? Optional kannst du ein Sterbedatum angeben oder leer lassen."
+      "markDeceasedBody": "{{name}} als verstorben markieren? Optional kannst du ein Sterbedatum angeben oder leer lassen.",
+      "swapParents": "Eltern tauschen",
+      "moveParentSlot": "In die richtige Rolle verschieben",
+      "swapDone": "Eltern getauscht.",
+      "moveDone": "In die richtige Rolle verschoben."
     }
   },
   "query": {
@@ -833,7 +863,10 @@
     "csvImported": "{{count}} Personen importiert.",
     "indexExport": "Namens- & Ortsverzeichnis",
     "indexExportDesc": "Druckfertiges alphabetisches Namens- und Ortsverzeichnis (wer wurde wo geboren/getraut/starb) als eine HTML-Datei.",
-    "indexExportBtn": "Verzeichnisse (HTML)"
+    "indexExportBtn": "Verzeichnisse (HTML)",
+    "sectionImportExport": "Import / Export",
+    "sectionApi": "Lokale API",
+    "sectionHelp": "Hilfe & Feedback"
   },
   "common": {
     "done": "Fertig",
@@ -1048,6 +1081,11 @@
     "fanColor_generation": "Generation",
     "fanColor_mono": "Einfarbig",
     "fanYears": "Jahre",
+    "fanFont": "Schriftart",
+    "fontCat_sans": "Serifenlos",
+    "fontCat_serif": "Serif",
+    "fontCat_script": "Schreibschrift",
+    "fontCat_display": "Display",
     "recenter": "Hier zentrieren",
     "collapse": "Einklappen",
     "expandAncestors": "Vorfahren anzeigen",
@@ -1357,6 +1395,11 @@
     "prev": "Zurück",
     "next": "Weiter",
     "notImage": "Dieses Dokument konnte nicht als Bild angezeigt werden.",
+    "tagPeople": "Personen markieren",
+    "tagHint": "Ziehe einen Rahmen um ein Gesicht / eine Person",
+    "tagAssign": "Wer ist das?",
+    "tagLabelOnly": "oder nur eine Beschriftung…",
+    "tagRemove": "Markierung entfernen",
     "openInBrowser": "Im Browser öffnen",
     "kind": "Art",
     "viewer": "Betrachter",
@@ -2073,7 +2116,8 @@
       "death": "Tod",
       "burial": "Bestattung",
       "other": "Sonstiges"
-    }
+    },
+    "controls": "Einstellungen"
   },
   "researchView": {
     "title": "Forschungsnotizen",
@@ -2154,5 +2198,11 @@
     "next": "Weiter",
     "back": "Zurück",
     "cancel": "Abbrechen"
+  },
+  "a11y": {
+    "title": "Bedienungshilfen",
+    "contrast": "Kontrast",
+    "contrastNormal": "Normal",
+    "contrastHigh": "Hoch"
   }
 }

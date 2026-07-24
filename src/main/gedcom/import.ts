@@ -51,7 +51,11 @@ function eventByType(node: GedNode, re: RegExp): { date: string | null; place: s
 }
 
 // EVEN TYPEs already captured as a structured field (christening) — not re-imported as a note.
-const HANDLED_EVENT_TYPE = /bapt|christen|keresz/i
+// An EVEN whose TYPE *is* the christening — captured into the christening
+// field, so not re-imported as a separate life event. EXACT match (anchored):
+// a custom event like "Christening reception" / "Keresztelési évforduló" is a
+// real event and must be kept, not swallowed.
+const HANDLED_EVENT_TYPE = /^\s*(bapt(?:ism|ismus)?|christening|taufe|keresztel[eé]s|keresztel[őo])\s*$/i
 
 /** Normalize a GEDCOM NAME/TYPE (or _AKA/NICK tag) to our canonical name-variant
  *  kinds — married / birth / aka / nickname / religious — so the alias chips
@@ -368,7 +372,7 @@ export function importGedcomText(text: string): GedcomImportResult {
       const presumedDead = birthYearM !== null && new Date().getFullYear() - Number(birthYearM[1]) > 110
       // Some exporters (FamilySearch) record the christening as a generic
       // `EVEN` with `TYPE Baptism/Christening` instead of a `CHR`/`BAPM` tag.
-      const evenChristening = eventByType(indi, /bapt|christen|keresz/i)
+      const evenChristening = eventByType(indi, HANDLED_EVENT_TYPE)
       const input = {
         gedcomId: xref,
         // FamilySearch person id, so the default-root can be resolved post-import.

@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAppStore } from '@/store/useAppStore'
 import { usePedigreeSettings } from '@/store/usePedigreeSettings'
+import { chartFontFamily, chartFontFaceCss } from '@/lib/chartFonts'
 import type {
   ExportPaper,
   PedigreeCouple,
@@ -155,8 +156,14 @@ export function ExportTreeDialog({
     })
   }, [open, rootId, rootFamilyId])
 
-  // Build a content object; avatars only loaded at export time.
-  const makeContent = (avatars: Map<string, string>, withPhotos: boolean): ExportContent => ({
+  // Build a content object; avatars only loaded at export time. `fanFontFaceCss`
+  // carries the embedded (base64) font for the fan export so the offscreen
+  // renderer shows the chosen face without any CDN/system dependency.
+  const makeContent = (
+    avatars: Map<string, string>,
+    withPhotos: boolean,
+    fanFontFaceCss = ''
+  ): ExportContent => ({
     photos: withPhotos,
     dates,
     places,
@@ -180,7 +187,11 @@ export function ExportTreeDialog({
     // ink when the chosen background is dark (cards stay white-on-dark text).
     ink: isDarkBg(bgColor) ? '#f4f4f5' : PRINT.ink,
     muted: isDarkBg(bgColor) ? '#a1a1aa' : PRINT.muted,
-    border: isDarkBg(bgColor) ? '#52525b' : PRINT.border
+    border: isDarkBg(bgColor) ? '#52525b' : PRINT.border,
+    // Fan label font (a bundled, self-hosted face). 'system' leaves the poster
+    // default in place; anything else overrides the fan text + embeds the woff2.
+    fanFontFamily: ped.fanFont === 'system' ? undefined : chartFontFamily(ped.fanFont),
+    fanFontFaceCss
   })
 
   // Size estimate (no avatars — dimensions don't depend on photos).
@@ -264,7 +275,8 @@ export function ExportTreeDialog({
           toast.error(t('export.emptyTree'))
           return
         }
-        const content = makeContent(new Map(), false)
+        const fontFaceCss = ped.fanFont === 'system' ? '' : await chartFontFaceCss(ped.fanFont)
+        const content = makeContent(new Map(), false, fontFaceCss)
         const tree = buildFanTreeSvg(data, fanGens, content)
         final = wrapPoster(content, tree)
       }

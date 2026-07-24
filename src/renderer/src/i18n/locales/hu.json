@@ -20,6 +20,7 @@
     "dragHint": "Húzd a képet a pozicionáláshoz, a csúszkával nagyíts.",
     "reset": "Visszaállítás középre",
     "replace": "Másik kép",
+    "remove": "Fotó eltávolítása",
     "none": "Nincs feltöltött kép."
   },
   "places": {
@@ -714,14 +715,43 @@
       "birthInFuture": "Jövőbeli születési dátum",
       "parentBornAfterChild": "A szülő a gyermek után született",
       "burialBeforeDeath": "Temetés az elhalálozás előtt",
-      "burialLongAfterDeath": "Temetés jóval az elhalálozás után"
+      "burialLongAfterDeath": "Temetés jóval az elhalálozás után",
+      "christeningBeforeBirth": "Keresztelés a születés előtt",
+      "christeningLongAfterBirth": "Keresztelés jóval a születés után",
+      "deathInFuture": "Halálozási dátum a jövőben",
+      "missingSex": "Nincs megadva a nem",
+      "nameHasAffix": "Titulus/utótag a névmezőben",
+      "nameWhitespace": "Fölösleges szóköz a névben",
+      "unparsableDate": "Értelmezhetetlen dátum",
+      "eventAfterDeath": "Esemény a halál után",
+      "eventBeforeBirth": "Esemény a születés előtt",
+      "ownAncestor": "A személy a saját őse",
+      "disconnected": "Nem kapcsolódik senkihez",
+      "duplicateCouple": "Ugyanaz a pár kétszer rögzítve",
+      "sexRoleMismatch": "A nem nem egyezik a szülői szereppel",
+      "marriedRelative": "Közeli rokonnal házas",
+      "spouseAgeGap": "Nagy korkülönbség a házastársak közt",
+      "marriedNameAsMaiden": "Asszonynév leánykori névként megadva",
+      "marriedBeforeBirth": "Házasság a születés előtt",
+      "marriedTooYoung": "Nagyon fiatalon házasodott",
+      "tooManyChildren": "Szokatlanul sok gyermek",
+      "parentlessFamily": "Család szülők nélkül",
+      "childBeforeMarriage": "Gyermek a házasságkötés előtt",
+      "parentTooOld": "Szülő szokatlanul idős a gyermek születésekor",
+      "siblingSameName": "Testvérek azonos keresztnévvel",
+      "missingMediaFile": "Hiányzó médiafájl",
+      "parentsSwapped": "Szülők felcserélve (férj/feleség fordítva)"
     },
     "fix": {
       "markDeceased": "Elhunyttá jelölés",
       "markDeceasedTitle": "Elhunyttá jelölés",
       "markDeceasedConfirm": "Megjelölés elhunytként",
       "deathDateOptional": "Elhalálozás dátuma (opcionális)",
-      "markDeceasedBody": "Biztosan elhunyttá jelölöd: {{name}}? Megadhatsz egy elhalálozási dátumot is, vagy hagyd üresen."
+      "markDeceasedBody": "Biztosan elhunyttá jelölöd: {{name}}? Megadhatsz egy elhalálozási dátumot is, vagy hagyd üresen.",
+      "swapParents": "Szülők cseréje",
+      "moveParentSlot": "Áthelyezés a helyes szerepbe",
+      "swapDone": "Szülők felcserélve.",
+      "moveDone": "Áthelyezve a helyes szerepbe."
     }
   },
   "query": {
@@ -833,7 +863,10 @@
     "csvImported": "{{count}} személy importálva.",
     "indexExport": "Név- és helymutató",
     "indexExportDesc": "Nyomtatható betűrendes névmutató és helymutató (ki született/házasodott/halt meg hol) egyetlen HTML-fájlban.",
-    "indexExportBtn": "Mutatók (HTML)"
+    "indexExportBtn": "Mutatók (HTML)",
+    "sectionImportExport": "Import / Export",
+    "sectionApi": "Helyi API",
+    "sectionHelp": "Súgó és visszajelzés"
   },
   "common": {
     "done": "Kész",
@@ -1048,6 +1081,11 @@
     "fanColor_generation": "Generáció",
     "fanColor_mono": "Egyszínű",
     "fanYears": "Évszámok",
+    "fanFont": "Betűtípus",
+    "fontCat_sans": "Talpatlan",
+    "fontCat_serif": "Talpas",
+    "fontCat_script": "Kézírás",
+    "fontCat_display": "Dísz",
     "recenter": "Középre helyezés",
     "collapse": "Becsukás",
     "expandAncestors": "Ősök megjelenítése",
@@ -1357,6 +1395,11 @@
     "prev": "Előző",
     "next": "Következő",
     "notImage": "Ez a dokumentum nem jeleníthető meg képként.",
+    "tagPeople": "Személyek bejelölése",
+    "tagHint": "Húzz egy keretet egy arc / személy köré",
+    "tagAssign": "Ki van a képen?",
+    "tagLabelOnly": "vagy csak egy címke…",
+    "tagRemove": "Jelölés törlése",
     "openInBrowser": "Megnyitás böngészőben",
     "kind": "Típus",
     "viewer": "Megtekintő",
@@ -2073,7 +2116,8 @@
       "death": "Halál",
       "burial": "Temetés",
       "other": "Egyéb"
-    }
+    },
+    "controls": "Beállítások"
   },
   "researchView": {
     "title": "Kutatási jegyzetek",
@@ -2154,5 +2198,11 @@
     "next": "Tovább",
     "back": "Vissza",
     "cancel": "Mégse"
+  },
+  "a11y": {
+    "title": "Kisegítő lehetőségek",
+    "contrast": "Kontraszt",
+    "contrastNormal": "Normál",
+    "contrastHigh": "Magas"
   }
 }

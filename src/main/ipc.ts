@@ -30,6 +30,7 @@ import { buildTree } from './db/tree'
 import { buildPedigree, buildPersonDescendants, buildUnionCouple } from './db/pedigree'
 import { detectKinship } from './db/kinship'
 import { exportTreeImage, exportHtmlPdf } from './treeExport'
+import { registerRegionsIpc } from './regionsIpc'
 import { buildMapMarkers } from './db/mapData'
 import { buildAtlasPoints } from './db/atlasData'
 import { getApiConfig, getApiStatus, regenerateApiToken, restartApiServer, setApiConfig } from './api/server'
@@ -130,6 +131,7 @@ function safeSend(sender: WebContents, channel: string, payload: unknown): void 
 }
 
 export function registerIpc(): void {
+  registerRegionsIpc() // photo region (face) tags
   // People
   ipcMain.handle(Channels.people.list, () => People.list())
   ipcMain.handle(Channels.people.get, (_e, id: string) => People.get(id))

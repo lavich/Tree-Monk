@@ -346,6 +346,8 @@ export const Channels = {
 
 /** The typed surface exposed to the renderer via contextBridge as `window.api`. */
 export interface TreeMonkApi {
+  /** Photo region (face) tags — see @shared/regions. */
+  regions: import('./regions').RegionsApi
   people: {
     list(): Promise<Person[]>
     get(id: string): Promise<Person | null>

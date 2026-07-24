@@ -393,7 +393,10 @@ export function exportGedcom(
       if (!personSet.has(cid)) continue
       out.push(line(1, 'CHIL', xref.get(cid)))
       // Per-parent relations that DIFFER (FTM convention; birth side omitted).
-      const rel = f.childRelations?.[cid]
+      // Withheld for an anonymized (living) child — adoption/foster/step is a
+      // sensitive fact the anonymize-living option is meant to hide.
+      const child = byId.get(cid)
+      const rel = child && !isAnon(child) ? f.childRelations?.[cid] : undefined
       if (rel && rel.father !== rel.mother) {
         if (rel.father) out.push(line(2, '_FREL', rel.father))
         if (rel.mother) out.push(line(2, '_MREL', rel.mother))

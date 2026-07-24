@@ -22,6 +22,8 @@ import {
   Route,
   Search,
   Shovel,
+  SlidersHorizontal,
+  ChevronUp,
   Sparkles,
   X
 } from 'lucide-react'
@@ -133,8 +135,32 @@ function safeFilterByDate(map: MLMap, year: number): void {
   }
 }
 
+/**
+ * Show basemap place labels in the app language. OpenFreeMap (OpenMapTiles)
+ * vector tiles carry `name:hu` / `name:de` / `name:en` fields, so we rewrite
+ * every basemap symbol layer's `text-field` to prefer the chosen language, then
+ * fall back to the transliterated latin name and finally the local name. Our own
+ * `atlas-*` data layers (cluster counts, journey stops) are left untouched.
+ */
+function localizeLabels(map: MLMap, lang: string): void {
+  const l = (lang || 'en').slice(0, 2)
+  const expr = ['coalesce', ['get', `name:${l}`], ['get', 'name:latin'], ['get', 'name']]
+  const layers = map.getStyle()?.layers
+  if (!layers) return
+  for (const layer of layers) {
+    if (layer.type !== 'symbol' || layer.id.startsWith('atlas-')) continue
+    const tf = (layer as { layout?: { 'text-field'?: unknown } }).layout?.['text-field']
+    if (!tf || !JSON.stringify(tf).includes('name')) continue // only name labels
+    try {
+      map.setLayoutProperty(layer.id, 'text-field', expr)
+    } catch {
+      /* layer went away mid-swap — the next apply re-localizes */
+    }
+  }
+}
+
 export function AtlasView(): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const theme = useTheme((s) => s.theme)
   const people = useAppStore((s) => s.people)
   const selectPerson = useAppStore((s) => s.selectPerson)
@@ -151,6 +177,8 @@ export function AtlasView(): JSX.Element {
   const [personMenu, setPersonMenu] = useState(false)
   const [geoProg, setGeoProg] = useState<{ done: number; total: number } | null>(null)
   const [placesOpen, setPlacesOpen] = useState(false)
+  // The control rail is collapsible but OPEN by default.
+  const [railOpen, setRailOpen] = useState(true)
   const dashRaf = useRef<number | undefined>(undefined)
   const fittedOnce = useRef(false)
 
@@ -567,6 +595,28 @@ export function AtlasView(): JSX.Element {
     ensureRef.current()
   }, [])
 
+  // Localize basemap labels to the app language, re-applied once per (style,lang)
+  // — the guard key prevents a styledata feedback loop (setLayoutProperty itself
+  // fires styledata).
+  const langRef = useRef(i18n.language)
+  langRef.current = i18n.language
+  const localeKeyRef = useRef('')
+  const applyLocaleRef = useRef<() => void>(() => undefined)
+  applyLocaleRef.current = (): void => {
+    const map = mapRef.current
+    if (!map || !map.getStyle()?.layers?.length) return
+    const key = `${resolvedRef.current.key}:${langRef.current}`
+    if (localeKeyRef.current === key) return
+    localeKeyRef.current = key
+    localizeLabels(map, langRef.current)
+  }
+
+  // Re-localize when the UI language changes (style already loaded). The guard
+  // key includes the language, so a change makes it differ → applyLocale re-runs.
+  useEffect(() => {
+    applyLocaleRef.current()
+  }, [i18n.language, ready])
+
   // Create the map once.
   useEffect(() => {
     const el = wrapRef.current
@@ -587,10 +637,17 @@ export function AtlasView(): JSX.Element {
     map.on('load', () => {
       setReady(true)
       ensureRef.current()
+      applyLocaleRef.current()
     })
     // styledata fires on every style mutation (incl. basemap swaps). ensure()
-    // is versioned/idempotent, so re-running it here is cheap and terminates.
-    map.on('styledata', () => ensureRef.current())
+    // and applyLocale are versioned/guarded (applyLocale's key = style:lang), so
+    // re-running here is cheap and TERMINATES: after localizing, the key matches
+    // and the setLayoutProperty-triggered styledata is a no-op. A basemap swap
+    // changes the style part of the key → labels re-localize exactly once.
+    map.on('styledata', () => {
+      ensureRef.current()
+      applyLocaleRef.current()
+    })
 
     map.on('click', 'atlas-clusters', (e) => {
       const f = e.features?.[0]
@@ -808,8 +865,35 @@ export function AtlasView(): JSX.Element {
         ))}
       </div>
 
-      {/* ---- Control rail (right, glass) ---- */}
-      <div className="glass-strong absolute right-3 top-3 z-10 flex max-h-[calc(100%-6.5rem)] w-72 flex-col overflow-hidden rounded-2xl text-foreground">
+      {/* ---- Control rail (right, glass) — collapsible, open by default ---- */}
+      {!railOpen && (
+        <button
+          onClick={() => setRailOpen(true)}
+          className="glass-strong absolute right-3 top-3 z-10 flex h-9 items-center gap-1.5 rounded-2xl px-3 text-xs font-medium text-foreground/80 transition-colors hover:text-primary"
+          title={t('atlas.controls')}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          {t('atlas.controls')}
+        </button>
+      )}
+      <div
+        className={cn(
+          'glass-strong absolute right-3 top-3 z-10 flex max-h-[calc(100%-6.5rem)] w-72 flex-col overflow-hidden rounded-2xl text-foreground',
+          !railOpen && 'hidden'
+        )}
+      >
+        <div className="flex items-center justify-between border-b border-border/40 py-2 pl-3.5 pr-2">
+          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <SlidersHorizontal className="h-3.5 w-3.5" /> {t('atlas.controls')}
+          </span>
+          <button
+            onClick={() => setRailOpen(false)}
+            title={t('common.close')}
+            className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          >
+            <ChevronUp className="h-4 w-4" />
+          </button>
+        </div>
         <div className="min-h-0 space-y-4 overflow-y-auto p-3.5">
           {/* Person focus — FIRST so the dropdown never needs scrolling. */}
           <section className="space-y-1.5">

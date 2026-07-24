@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ImageUp, RotateCcw, ZoomIn } from 'lucide-react'
+import { ImageUp, RotateCcw, Trash2, ZoomIn } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import {
   frameOverflow,
   frameStyle,
   frameToJson,
+  frameToRegion,
   parseFrame,
   type PhotoFrame
 } from '@/lib/photoFrame'
@@ -95,6 +96,46 @@ export function PhotoFrameDialog({
       const updated = await window.api.people.update(person.id, {
         profilePhotoCrop: frameToJson(frame)
       })
+      // Auto-tag: the profile-photo crop marks WHERE this person is on that
+      // image. Upsert a photo region at the crop rectangle (best-effort — a tag
+      // hiccup must never block saving the framing).
+      if (person.profilePhotoId) {
+        try {
+          const rect = frameToRegion(frame)
+          const existing = (await window.api.regions.forDocument(person.profilePhotoId)).find(
+            (r) => r.personId === person.id
+          )
+          if (existing) await window.api.regions.update(existing.id, rect)
+          else await window.api.regions.create({ documentId: person.profilePhotoId, personId: person.id, ...rect })
+        } catch {
+          /* non-fatal */
+        }
+      }
+      onChanged(updated)
+      onOpenChange(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Clear the profile photo (keeps the underlying document) and drop the tag
+   *  that its crop auto-created. */
+  const remove = async (): Promise<void> => {
+    setSaving(true)
+    try {
+      const oldDoc = person.profilePhotoId
+      const updated = await window.api.people.update(person.id, {
+        profilePhotoId: null,
+        profilePhotoCrop: null
+      })
+      if (oldDoc) {
+        try {
+          const mine = (await window.api.regions.forDocument(oldDoc)).find((r) => r.personId === person.id)
+          if (mine) await window.api.regions.remove(mine.id)
+        } catch {
+          /* non-fatal */
+        }
+      }
       onChanged(updated)
       onOpenChange(false)
     } finally {
@@ -155,12 +196,28 @@ export function PhotoFrameDialog({
           <p className="py-6 text-center text-sm text-muted-foreground">{t('photo.none')}</p>
         )}
 
-        <DialogFooter className="gap-2 sm:justify-between">
-          <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onReplace}>
-            <ImageUp className="h-4 w-4" />
-            {t('photo.replace')}
-          </Button>
-          <div className="flex gap-2">
+        {/* flex-wrap so the four buttons never overflow the narrow dialog: the
+            primary pair (ml-auto) drops to its own right-aligned row when the
+            long (e.g. German) labels don't all fit on one line. */}
+        <DialogFooter className="flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onReplace}>
+              <ImageUp className="h-4 w-4" />
+              {t('photo.replace')}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-destructive hover:text-destructive"
+              disabled={!person.profilePhotoId || saving}
+              onClick={() => void remove()}
+            >
+              <Trash2 className="h-4 w-4" />
+              {t('photo.remove')}
+            </Button>
+          </div>
+          <div className="flex gap-2 ml-auto">
             <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
               {t('common.cancel')}
             </Button>

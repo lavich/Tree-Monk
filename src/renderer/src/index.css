@@ -103,6 +103,69 @@
     --cork-spot: 25 32% 13%;
     --cork-edge: 24 30% 9%;
   }
+
+  /* ---- High-contrast (accessibility) ---- pure black/white surfaces, hard
+     borders, a darker/brighter primary, and solid (non-translucent) panels.
+     Toggled by the `.hc` class on <html> (see useSettings). */
+  .hc {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 173 100% 22%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 88%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 88%;
+    --muted-foreground: 0 0% 18%;
+    --accent: 0 0% 82%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 100% 33%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 0%;
+    --input: 0 0% 20%;
+    --ring: 173 100% 22%;
+    --glass-opacity: 1;
+  }
+  .hc.dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 173 90% 62%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 17%;
+    --muted-foreground: 0 0% 88%;
+    --accent: 0 0% 24%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 68%;
+    --destructive-foreground: 0 0% 0%;
+    --border: 0 0% 100%;
+    --input: 0 0% 82%;
+    --ring: 173 90% 62%;
+    --glass-opacity: 1;
+  }
+}
+
+/* High-contrast: drop the frosted blur/translucency so panels are solid, and
+   give every focused control a bold, always-visible outline. */
+.hc .glass,
+.hc .glass-strong,
+.hc .glass-subtle,
+.hc .glass-edge,
+.hc .tm-glass {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.hc *:focus-visible {
+  outline: 3px solid hsl(var(--ring)) !important;
+  outline-offset: 2px !important;
 }
 
 @layer base {

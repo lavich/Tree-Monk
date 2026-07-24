@@ -129,6 +129,40 @@ export type DocumentInput = Partial<
   Omit<DocumentRecord, 'id' | 'createdAt' | 'personIds'>
 > & { personIds?: string[] }
 
+/** A rectangular face/zone tag on a photo, linked to a person (or a free label).
+ *  All coordinates are normalised fractions (0..1) of the image. */
+export interface PhotoRegion {
+  id: string
+  documentId: string
+  personId: string | null
+  /** Free-text label used when no person is linked. */
+  label: string | null
+  x: number
+  y: number
+  w: number
+  h: number
+  createdAt: string
+  /** Denormalised person name for display (resolved on read). */
+  personName?: string | null
+  /** Denormalised person sex, for the avatar/placeholder colour. */
+  personSex?: string | null
+}
+
+export type PhotoRegionInput = {
+  documentId: string
+  personId?: string | null
+  label?: string | null
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/** A photo a given person is tagged in — for the "appears in" profile list. */
+export interface PersonPhotoTag extends PhotoRegion {
+  documentTitle: string
+}
+
 // ---- Investigation Board ----
 
 export type BoardNodeKind =
@@ -707,14 +741,15 @@ export type CustomFamousInput = Omit<CustomFamous, 'id'>
 
 // ---- Sanity check (data issues) ----
 
-export type SanitySeverity = 'high' | 'medium'
+export type SanitySeverity = 'high' | 'medium' | 'low'
 
 /** A one-click correction the Issues page can offer for an anomaly. */
-export interface SanityFix {
-  kind: 'markDeceased'
-  personId: string
-  personName: string
-}
+export type SanityFix =
+  | { kind: 'markDeceased'; personId: string; personName: string }
+  /** Swap husband ↔ wife on a family (parents entered in the wrong slots). */
+  | { kind: 'swapParents'; familyId: string; husbandId: string; wifeId: string; label: string }
+  /** Move a lone parent into the slot that matches their sex. */
+  | { kind: 'moveParentSlot'; familyId: string; personId: string; to: 'husband' | 'wife'; personName: string }
 
 export interface SanityIssue {
   id: string
@@ -735,7 +770,14 @@ export interface PersonSnapshot {
   person: Person
   husbandOf: string[]
   wifeOf: string[]
-  childOf: { familyId: string; ordinal: number }[]
+  childOf: {
+    familyId: string
+    ordinal: number
+    /** Per-parent (and legacy) relation types, so undo restores adopted/foster/step. */
+    relation?: string | null
+    fatherRelation?: string | null
+    motherRelation?: string | null
+  }[]
   documentIds: string[]
   citations: Citation[]
   noteIds: string[]

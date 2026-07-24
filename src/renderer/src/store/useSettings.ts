@@ -2,6 +2,7 @@ import { create } from 'zustand'
 
 export type FontSize = 'small' | 'medium' | 'large'
 export type DateFormat = 'iso' | 'eu' | 'us'
+export type Contrast = 'normal' | 'high'
 
 const KEY = 'treemonk.settings'
 const FONT_PX: Record<FontSize, string> = { small: '14px', medium: '16px', large: '18px' }
@@ -18,27 +19,31 @@ interface SettingsState {
   sidebarCollapsed: boolean
   /** Show a green/orange "verified" mark on every person (default: OFF). */
   verificationMarks: boolean
+  /** Accessibility: high-contrast surfaces (default: 'normal'). */
+  contrast: Contrast
   setFontSize: (f: FontSize) => void
   setAnimations: (v: boolean) => void
   setReduceEffects: (v: boolean) => void
   setDateFormat: (d: DateFormat) => void
   setSidebarCollapsed: (v: boolean) => void
   setVerificationMarks: (v: boolean) => void
+  setContrast: (c: Contrast) => void
 }
 
 type Persisted = Pick<
   SettingsState,
-  'fontSize' | 'animations' | 'reduceEffects' | 'dateFormat' | 'sidebarCollapsed' | 'verificationMarks'
+  'fontSize' | 'animations' | 'reduceEffects' | 'dateFormat' | 'sidebarCollapsed' | 'verificationMarks' | 'contrast'
 >
 
 function persist(s: Persisted): void {
   localStorage.setItem(KEY, JSON.stringify(s))
 }
 
-function apply(s: Pick<SettingsState, 'fontSize' | 'animations' | 'reduceEffects'>): void {
+function apply(s: Pick<SettingsState, 'fontSize' | 'animations' | 'reduceEffects' | 'contrast'>): void {
   document.documentElement.style.fontSize = FONT_PX[s.fontSize]
   document.documentElement.classList.toggle('no-anim', !s.animations)
   document.documentElement.classList.toggle('no-glass', s.reduceEffects)
+  document.documentElement.classList.toggle('hc', s.contrast === 'high')
 }
 
 function load(): Persisted {
@@ -52,7 +57,8 @@ function load(): Persisted {
         reduceEffects: p.reduceEffects ?? false,
         dateFormat: p.dateFormat ?? 'iso',
         sidebarCollapsed: p.sidebarCollapsed ?? false,
-        verificationMarks: p.verificationMarks ?? false
+        verificationMarks: p.verificationMarks ?? false,
+        contrast: p.contrast ?? 'normal'
       }
     }
   } catch {
@@ -64,7 +70,8 @@ function load(): Persisted {
     reduceEffects: false,
     dateFormat: 'iso',
     sidebarCollapsed: false,
-    verificationMarks: false
+    verificationMarks: false,
+    contrast: 'normal'
   }
 }
 
@@ -72,17 +79,17 @@ export const useSettings = create<SettingsState>((set, get) => ({
   ...load(),
   setFontSize: (fontSize) => {
     set({ fontSize })
-    apply({ fontSize, animations: get().animations, reduceEffects: get().reduceEffects })
+    apply({ fontSize, animations: get().animations, reduceEffects: get().reduceEffects, contrast: get().contrast })
     persist({ ...current(get), fontSize })
   },
   setAnimations: (animations) => {
     set({ animations })
-    apply({ fontSize: get().fontSize, animations, reduceEffects: get().reduceEffects })
+    apply({ fontSize: get().fontSize, animations, reduceEffects: get().reduceEffects, contrast: get().contrast })
     persist({ ...current(get), animations })
   },
   setReduceEffects: (reduceEffects) => {
     set({ reduceEffects })
-    apply({ fontSize: get().fontSize, animations: get().animations, reduceEffects })
+    apply({ fontSize: get().fontSize, animations: get().animations, reduceEffects, contrast: get().contrast })
     persist({ ...current(get), reduceEffects })
   },
   setDateFormat: (dateFormat) => {
@@ -96,6 +103,11 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setVerificationMarks: (verificationMarks) => {
     set({ verificationMarks })
     persist({ ...current(get), verificationMarks })
+  },
+  setContrast: (contrast) => {
+    set({ contrast })
+    apply({ fontSize: get().fontSize, animations: get().animations, reduceEffects: get().reduceEffects, contrast })
+    persist({ ...current(get), contrast })
   }
 }))
 
@@ -108,7 +120,8 @@ function current(get: () => SettingsState): Persisted {
     reduceEffects: s.reduceEffects,
     dateFormat: s.dateFormat,
     sidebarCollapsed: s.sidebarCollapsed,
-    verificationMarks: s.verificationMarks
+    verificationMarks: s.verificationMarks,
+    contrast: s.contrast
   }
 }
 

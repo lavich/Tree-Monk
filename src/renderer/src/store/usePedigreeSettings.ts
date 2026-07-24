@@ -76,6 +76,9 @@ export interface PedigreeValues {
   fanColorMode: FanColorMode
   /** Show birth/death years on the fan. */
   fanShowYears: boolean
+  /** Fan chart label font — a key from the local chart-font catalogue
+   *  (`'system'` = the default Inter/system stack). See lib/chartFonts. */
+  fanFont: string
   /** Horizontal spacing between generations (px). */
   colGap: number
   /** Vertical spacing between sibling cards (px). */
@@ -123,6 +126,7 @@ const DEFAULTS: PedigreeValues = {
   fanSweep: 360,
   fanColorMode: 'sex',
   fanShowYears: true,
+  fanFont: 'system',
   colGap: 320,
   rowGap: 188,
   accent: PEDIGREE_ACCENTS[0].color,

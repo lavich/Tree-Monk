@@ -57,6 +57,23 @@ export function frameOverflow(f: PhotoFrame): { x: number; y: number } {
 }
 
 /**
+ * The visible avatar window expressed as a normalised (0..1) rectangle of the
+ * SOURCE image — i.e. exactly the crop the framing shows. Used to auto-create a
+ * photo-region tag at the crop location. Pure arithmetic (no bitmap needed): the
+ * frame already carries the aspect `a`.
+ */
+export function frameToRegion(f: PhotoFrame): { x: number; y: number; w: number; h: number } {
+  const c = coverRatio(f)
+  const iw = c.w * f.scale // image width  as a multiple of the square box
+  const ih = c.h * f.scale // image height as a multiple of the square box
+  const x = clamp01(iw > 0 ? ((iw - 1) * f.x) / iw : 0)
+  const y = clamp01(ih > 0 ? ((ih - 1) * f.y) / ih : 0)
+  const w = clamp01(iw > 0 ? 1 / iw : 1)
+  const h = clamp01(ih > 0 ? 1 / ih : 1)
+  return { x, y, w: Math.min(w, 1 - x), h: Math.min(h, 1 - y) }
+}
+
+/**
  * CSS for the framed `<img>`. The image is sized to cover the square box (times
  * the zoom) and absolutely positioned — only the container's `overflow-hidden`
  * clips it. This is the key fix over an `object-cover` + transform approach:

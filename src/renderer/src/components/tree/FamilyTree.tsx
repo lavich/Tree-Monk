@@ -622,6 +622,7 @@ export function FamilyTree(): JSX.Element {
           colorMode={ped.fanColorMode}
           showYears={ped.fanShowYears}
           accent={ped.accent}
+          font={ped.fanFont}
           onSelect={selectPerson}
         />
       )}

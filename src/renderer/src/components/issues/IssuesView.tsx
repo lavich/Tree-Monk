@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, EyeOff, GitMerge, Heart, Loader2, MapPin, RefreshCw, ShieldAlert, Bird, SpellCheck, Type, Users, Users2, X, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, ArrowRight, CalendarDays, CheckCircle2, EyeOff, GitMerge, Heart, Loader2, MapPin, RefreshCw, ShieldAlert, Bird, SpellCheck, Type, Users, Users2, X, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,7 +36,7 @@ function MarkDeceasedDialog({
   onClose,
   onApplied
 }: {
-  fix: SanityFix | null
+  fix: Extract<SanityFix, { kind: 'markDeceased' }> | null
   onClose: () => void
   onApplied: () => void
 }): JSX.Element {
@@ -103,7 +103,7 @@ export function IssuesView(): JSX.Element {
   const [issues, setIssues] = useState<SanityIssue[]>([])
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'issues' | 'dups' | 'surnames' | 'givennames'>('issues')
-  const [fixTarget, setFixTarget] = useState<SanityFix | null>(null)
+  const [fixTarget, setFixTarget] = useState<Extract<SanityFix, { kind: 'markDeceased' }> | null>(null)
   const [dismissTarget, setDismissTarget] = useState<SanityIssue | null>(null)
 
   // Duplicates (on-demand)
@@ -154,6 +154,28 @@ export function IssuesView(): JSX.Element {
     setIssues(await window.api.sanity.check())
     setLoading(false)
   }, [])
+
+  /** One-click structural fixes (no dialog): swap the two parents, or move a lone
+   *  parent into the slot matching their sex. Then refresh + rescan. */
+  const applyStructuralFix = useCallback(
+    async (fix: SanityFix): Promise<void> => {
+      if (fix.kind === 'swapParents') {
+        await window.api.families.update(fix.familyId, { husbandId: fix.wifeId, wifeId: fix.husbandId })
+        toast.success(t('issues.fix.swapDone'))
+      } else if (fix.kind === 'moveParentSlot') {
+        await window.api.families.update(
+          fix.familyId,
+          fix.to === 'wife' ? { husbandId: null, wifeId: fix.personId } : { wifeId: null, husbandId: fix.personId }
+        )
+        toast.success(t('issues.fix.moveDone'))
+      } else {
+        return
+      }
+      await refreshAll()
+      await scan()
+    },
+    [refreshAll, scan, t]
+  )
 
   const scanDups = useCallback(async () => {
     setDupLoading(true)
@@ -318,14 +340,22 @@ export function IssuesView(): JSX.Element {
                     key={issue.id}
                     className={cn(
                       'rounded-xl border bg-secondary/40 p-3 backdrop-blur-sm',
-                      issue.severity === 'high' ? 'border-destructive/40' : 'border-amber-500/30'
+                      issue.severity === 'high'
+                        ? 'border-destructive/40'
+                        : issue.severity === 'medium'
+                          ? 'border-amber-500/30'
+                          : 'border-sky-500/25'
                     )}
                   >
                     <div className="flex items-start gap-2.5">
                       <AlertTriangle
                         className={cn(
                           'mt-0.5 h-4 w-4 shrink-0',
-                          issue.severity === 'high' ? 'text-destructive' : 'text-amber-500'
+                          issue.severity === 'high'
+                            ? 'text-destructive'
+                            : issue.severity === 'medium'
+                              ? 'text-amber-500'
+                              : 'text-sky-500'
                         )}
                       />
                       <div className="min-w-0 flex-1">
@@ -347,13 +377,21 @@ export function IssuesView(): JSX.Element {
                               {peopleById.get(p.id) ? fullName(peopleById.get(p.id)!) : p.name}
                             </button>
                           ))}
-                          {issue.fixes?.map((fix) => (
+                          {issue.fixes?.map((fix, fi) => (
                             <button
-                              key={`${fix.kind}:${fix.personId}`}
-                              onClick={() => setFixTarget(fix)}
+                              key={`${fix.kind}:${fi}`}
+                              onClick={() =>
+                                fix.kind === 'markDeceased' ? setFixTarget(fix) : void applyStructuralFix(fix)
+                              }
                               className="flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20"
                             >
-                              <Bird className="h-3 w-3" />
+                              {fix.kind === 'swapParents' ? (
+                                <ArrowLeftRight className="h-3 w-3" />
+                              ) : fix.kind === 'moveParentSlot' ? (
+                                <ArrowRight className="h-3 w-3" />
+                              ) : (
+                                <Bird className="h-3 w-3" />
+                              )}
                               {fixLabel(fix)}
                             </button>
                           ))}

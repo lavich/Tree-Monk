@@ -62,7 +62,12 @@ export function DocumentViewerDialog({
         </DialogHeader>
         <div className="relative min-h-0 flex-1">
           {activeUrl && !viewerError && (
-            <ImageViewer src={activeUrl} alt={active?.title} onError={() => setViewerError(true)} />
+            <ImageViewer
+              src={activeUrl}
+              alt={active?.title}
+              documentId={active?.id}
+              onError={() => setViewerError(true)}
+            />
           )}
           {viewerError && active && (
             <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted-foreground">

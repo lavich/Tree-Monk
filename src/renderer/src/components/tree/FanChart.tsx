@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { TreeNodeDatum } from '@shared/types'
 import type { FanColorMode, FanSweep } from '@/store/usePedigreeSettings'
 import { formatName } from '@/lib/utils'
+import { chartFontFamily, ensureChartFont } from '@/lib/chartFonts'
 
 /**
  * Fan (circle) ancestor chart — Canvas 2D renderer with its own infinite camera.
@@ -28,7 +29,6 @@ const DEG = Math.PI / 180
 const R0 = 70 // central disc radius (chart units)
 const RING = 92 // generation ring thickness
 const RING_PAD = 4 // radial gap between rings
-const FONT = "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif"
 
 interface Hover {
   label: string
@@ -132,6 +132,7 @@ function FanChartImpl({
   colorMode = 'sex',
   showYears = true,
   accent = '#16c2ad',
+  font = 'system',
   onSelect
 }: {
   data: TreeNodeDatum
@@ -140,11 +141,16 @@ function FanChartImpl({
   colorMode?: FanColorMode
   showYears?: boolean
   accent?: string
+  /** Chart label font — a key from lib/chartFonts (`'system'` = default). */
+  font?: string
   onSelect: (personId: string) => void
 }): JSX.Element {
   // Re-renders on language switch; Hungarian writes the family name first.
   const { i18n } = useTranslation()
   const huFirst = (i18n.language || '').toLowerCase().startsWith('hu')
+  // Resolved CSS family the canvas draws with (recomputed each render → the
+  // drawRef closure below always captures the current selection).
+  const fontFamily = chartFontFamily(font)
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -363,7 +369,7 @@ function FanChartImpl({
         const w12 = (t: string): number => {
           let v = mcache.current.get(t)
           if (v === undefined) {
-            ctx.font = `12px ${FONT}`
+            ctx.font = `12px ${fontFamily}`
             v = ctx.measureText(t).width
             mcache.current.set(t, v)
           }
@@ -394,12 +400,12 @@ function FanChartImpl({
           const line1 = huFirst ? w.surname : w.given
           const line2 = huFirst ? w.given : w.surname
           ctx.fillStyle = fg
-          ctx.font = `${huFirst ? 600 : 500} ${fs}px ${FONT}`
+          ctx.font = `${huFirst ? 600 : 500} ${fs}px ${fontFamily}`
           ctx.fillText(line1, 0, -0.66 * fs)
-          ctx.font = `${huFirst ? 500 : 600} ${fs}px ${FONT}`
+          ctx.font = `${huFirst ? 500 : 600} ${fs}px ${fontFamily}`
           ctx.fillText(line2, 0, 0.66 * fs)
           if (showYears && w.years && tp >= 48 && twoS >= 8.5) {
-            ctx.font = `${fs * 0.8}px ${FONT}`
+            ctx.font = `${fs * 0.8}px ${fontFamily}`
             ctx.fillStyle = mutedFg
             ctx.fillText(w.years, 0, 1.9 * fs)
           }
@@ -435,7 +441,7 @@ function FanChartImpl({
           if (text) {
             const fs = fsS / s
             ctx.fillStyle = fg
-            ctx.font = `500 ${fs}px ${FONT}`
+            ctx.font = `500 ${fs}px ${fontFamily}`
             ctx.fillText(text, 0, 0)
           }
         }
@@ -447,7 +453,7 @@ function FanChartImpl({
     if (s * RING > 30) {
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.font = `600 ${10 / s}px ${FONT}`
+      ctx.font = `600 ${10 / s}px ${fontFamily}`
       ctx.fillStyle = mutedFg
       ctx.globalAlpha = 0.55
       for (let gen = 1; gen <= generations; gen++) {
@@ -478,16 +484,16 @@ function FanChartImpl({
 
       const rootName = formatName(data.given, data.surname) || data.name
       const rootYears = [data.birthYear, data.deathYear].filter(Boolean).join('–')
-      ctx.font = `600 12px ${FONT}`
+      ctx.font = `600 12px ${fontFamily}`
       const nameW = ctx.measureText(rootName).width
       const fsRoot = Math.min(14, ((R0 * 1.7) / Math.max(1, nameW)) * 12)
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillStyle = fg
-      ctx.font = `600 ${fsRoot}px ${FONT}`
+      ctx.font = `600 ${fsRoot}px ${fontFamily}`
       ctx.fillText(rootName, 0, rootYears ? -8 : 0)
       if (rootYears) {
-        ctx.font = `${Math.max(9, fsRoot * 0.75)}px ${FONT}`
+        ctx.font = `${Math.max(9, fsRoot * 0.75)}px ${fontFamily}`
         ctx.fillStyle = mutedFg
         ctx.fillText(rootYears, 0, 10)
       }
@@ -552,6 +558,24 @@ function FanChartImpl({
     batchCache.current.clear()
     scheduleDraw()
   }, [byGen, colorMode, showYears, accent, scheduleDraw])
+
+  // Font change → the width cache (measured at the old face) is stale; clear it
+  // and repaint now (falls back until loaded), then repaint again once the
+  // chosen font's files are registered so labels re-measure against the real
+  // metrics. Camera/zoom is intentionally left untouched.
+  useEffect(() => {
+    mcache.current.clear()
+    scheduleDraw()
+    let alive = true
+    void ensureChartFont(font).then(() => {
+      if (!alive) return
+      mcache.current.clear()
+      scheduleDraw()
+    })
+    return () => {
+      alive = false
+    }
+  }, [font, fontFamily, scheduleDraw])
 
   // Theme switches (light/dark) repaint the canvas with the new palette.
   useEffect(() => {

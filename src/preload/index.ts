@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { Channels, type TreeMonkApi } from '@shared/ipc'
+import { RegionChannels } from '@shared/regions'
 
 const api: TreeMonkApi = {
   people: {
@@ -42,6 +43,13 @@ const api: TreeMonkApi = {
     detach: (docId, pid) => ipcRenderer.invoke(Channels.documents.detach, docId, pid),
     dataUrl: (id) => ipcRenderer.invoke(Channels.documents.dataUrl, id),
     open: (id) => ipcRenderer.invoke(Channels.documents.open, id)
+  },
+  regions: {
+    forDocument: (documentId) => ipcRenderer.invoke(RegionChannels.forDocument, documentId),
+    forPerson: (personId) => ipcRenderer.invoke(RegionChannels.forPerson, personId),
+    create: (input) => ipcRenderer.invoke(RegionChannels.create, input),
+    update: (id, patch) => ipcRenderer.invoke(RegionChannels.update, id, patch),
+    remove: (id) => ipcRenderer.invoke(RegionChannels.remove, id)
   },
   board: {
     get: (boardId) => ipcRenderer.invoke(Channels.board.get, boardId),

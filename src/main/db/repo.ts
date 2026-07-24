@@ -19,6 +19,9 @@ import type {
   Person,
   PersonAttribute,
   PersonInput,
+  PersonPhotoTag,
+  PhotoRegion,
+  PhotoRegionInput,
   RelationshipType,
   Sex
 } from '@shared/types'
@@ -384,10 +387,23 @@ export const People = {
       person,
       husbandOf: ids(db.prepare('SELECT id FROM families WHERE husband_id = ?').all(id)),
       wifeOf: ids(db.prepare('SELECT id FROM families WHERE wife_id = ?').all(id)),
-      childOf: (db.prepare('SELECT family_id, ordinal FROM family_children WHERE child_id = ?').all(id) as {
+      childOf: (db
+        .prepare(
+          'SELECT family_id, ordinal, relation, father_relation, mother_relation FROM family_children WHERE child_id = ?'
+        )
+        .all(id) as {
         family_id: string
         ordinal: number
-      }[]).map((r) => ({ familyId: r.family_id, ordinal: r.ordinal })),
+        relation: string | null
+        father_relation: string | null
+        mother_relation: string | null
+      }[]).map((r) => ({
+        familyId: r.family_id,
+        ordinal: r.ordinal,
+        relation: r.relation,
+        fatherRelation: r.father_relation,
+        motherRelation: r.mother_relation
+      })),
       documentIds: ids(db.prepare('SELECT document_id AS id FROM person_documents WHERE person_id = ?').all(id)),
       citations: db
         .prepare("SELECT * FROM citations WHERE owner_type='person' AND owner_id = ?")
@@ -468,11 +484,10 @@ export const People = {
     for (const fid of snap.wifeOf)
       db.prepare('UPDATE families SET wife_id = ? WHERE id = ?').run(p.id, fid)
     for (const c of snap.childOf)
-      db.prepare('INSERT OR IGNORE INTO family_children (family_id, child_id, ordinal) VALUES (?, ?, ?)').run(
-        c.familyId,
-        p.id,
-        c.ordinal
-      )
+      db.prepare(
+        `INSERT OR IGNORE INTO family_children (family_id, child_id, ordinal, relation, father_relation, mother_relation)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(c.familyId, p.id, c.ordinal, c.relation ?? null, c.fatherRelation ?? null, c.motherRelation ?? null)
     for (const did of snap.documentIds)
       db.prepare('INSERT OR IGNORE INTO person_documents (person_id, document_id) VALUES (?, ?)').run(p.id, did)
     for (const cit of snap.citations) Citations.create(cit, cit.id)
@@ -858,6 +873,111 @@ function safeJson(s: string): Record<string, unknown> {
     return JSON.parse(s) as Record<string, unknown>
   } catch {
     return {}
+  }
+}
+
+interface RegionRow {
+  id: string
+  document_id: string
+  person_id: string | null
+  label: string | null
+  x: number
+  y: number
+  w: number
+  h: number
+  created_at: string
+  pg: string | null
+  ps: string | null
+  psex: string | null
+}
+
+function mapRegion(r: RegionRow): PhotoRegion {
+  const name = [r.pg, r.ps].map((s) => (s ?? '').trim()).filter(Boolean).join(' ')
+  return {
+    id: r.id,
+    documentId: r.document_id,
+    personId: r.person_id,
+    label: r.label,
+    x: r.x,
+    y: r.y,
+    w: r.w,
+    h: r.h,
+    createdAt: r.created_at,
+    personName: r.person_id ? name || null : null,
+    personSex: r.psex
+  }
+}
+
+const REGION_SELECT =
+  `SELECT r.id, r.document_id, r.person_id, r.label, r.x, r.y, r.w, r.h, r.created_at,
+          p.given_name AS pg, p.surname AS ps, p.sex AS psex
+   FROM photo_regions r LEFT JOIN people p ON p.id = r.person_id`
+
+export const PhotoRegions = {
+  forDocument(documentId: string): PhotoRegion[] {
+    return (
+      getDb()
+        .prepare(`${REGION_SELECT} WHERE r.document_id = ? ORDER BY r.created_at, r.rowid`)
+        .all(documentId) as RegionRow[]
+    ).map(mapRegion)
+  },
+  forPerson(personId: string): PersonPhotoTag[] {
+    return (
+      getDb()
+        .prepare(
+          `SELECT r.id, r.document_id, r.person_id, r.label, r.x, r.y, r.w, r.h, r.created_at,
+                  p.given_name AS pg, p.surname AS ps, p.sex AS psex, d.title AS dtitle
+           FROM photo_regions r
+           JOIN documents d ON d.id = r.document_id
+           LEFT JOIN people p ON p.id = r.person_id
+           WHERE r.person_id = ? ORDER BY r.created_at`
+        )
+        .all(personId) as (RegionRow & { dtitle: string })[]
+    ).map((r) => ({ ...mapRegion(r), documentTitle: r.dtitle }))
+  },
+  get(id: string): PhotoRegion | null {
+    const r = getDb().prepare(`${REGION_SELECT} WHERE r.id = ?`).get(id) as RegionRow | undefined
+    return r ? mapRegion(r) : null
+  },
+  create(input: PhotoRegionInput, id = uuid()): PhotoRegion {
+    getDb()
+      .prepare(
+        `INSERT INTO photo_regions (id, document_id, person_id, label, x, y, w, h, created_at)
+         VALUES (@id, @document_id, @person_id, @label, @x, @y, @w, @h, @created_at)`
+      )
+      .run({
+        id,
+        document_id: input.documentId,
+        person_id: input.personId ?? null,
+        label: input.label ?? null,
+        x: input.x,
+        y: input.y,
+        w: input.w,
+        h: input.h,
+        created_at: new Date().toISOString()
+      })
+    return this.get(id)!
+  },
+  update(id: string, patch: Partial<PhotoRegionInput>): PhotoRegion | null {
+    const existing = this.get(id)
+    if (!existing) return null
+    getDb()
+      .prepare(
+        `UPDATE photo_regions SET person_id = @person_id, label = @label, x = @x, y = @y, w = @w, h = @h WHERE id = @id`
+      )
+      .run({
+        id,
+        person_id: patch.personId !== undefined ? patch.personId : existing.personId,
+        label: patch.label !== undefined ? patch.label : existing.label,
+        x: patch.x ?? existing.x,
+        y: patch.y ?? existing.y,
+        w: patch.w ?? existing.w,
+        h: patch.h ?? existing.h
+      })
+    return this.get(id)
+  },
+  remove(id: string): void {
+    getDb().prepare('DELETE FROM photo_regions WHERE id = ?').run(id)
   }
 }
 

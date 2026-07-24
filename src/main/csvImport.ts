@@ -49,45 +49,57 @@ function mapSex(raw: string): Sex {
   return 'U'
 }
 
-/** Minimal RFC-ish CSV line splitter with quote support. */
-function splitLine(line: string, delim: string): string[] {
-  const out: string[] = []
+/**
+ * RFC-4180-ish parser over the WHOLE text: a quoted field may contain the
+ * delimiter, quotes (doubled) AND newlines, so splitting on lines first would
+ * corrupt an Excel export whose cell holds a multi-line note. Returns records
+ * of trimmed cells; fully-empty records are dropped by the caller.
+ */
+function parseRecords(text: string, delim: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
   let cur = ''
   let quoted = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
     if (quoted) {
       if (ch === '"') {
-        if (line[i + 1] === '"') {
+        if (text[i + 1] === '"') {
           cur += '"'
           i++
         } else quoted = false
       } else cur += ch
     } else if (ch === '"') quoted = true
     else if (ch === delim) {
-      out.push(cur)
+      row.push(cur)
+      cur = ''
+    } else if (ch === '\r') {
+      // ignore — newlines are driven by \n
+    } else if (ch === '\n') {
+      row.push(cur)
+      rows.push(row)
+      row = []
       cur = ''
     } else cur += ch
   }
-  out.push(cur)
-  return out.map((c) => c.trim())
+  row.push(cur)
+  rows.push(row)
+  return rows.map((r) => r.map((c) => c.trim()))
 }
 
 export function importCsvText(text: string): { created: number; skipped: number } {
-  // Strip a BOM (Excel writes one), split lines, drop empties.
-  const lines = text
-    .replace(/^﻿/, '')
-    .split(/\r?\n/)
-    .filter((l) => l.trim().length > 0)
-  if (lines.length < 2) return { created: 0, skipped: 0 }
-
-  // Delimiter: whichever of ; , tab appears most in the header line.
-  const header = lines[0]
+  const clean = text.replace(/^﻿/, '') // strip a BOM (Excel writes one)
+  // Delimiter: whichever of ; , tab appears most on the header (first) line.
+  const firstLine = clean.split(/\r?\n/, 1)[0] ?? ''
   const delim = [';', ',', '\t']
-    .map((d) => ({ d, n: header.split(d).length }))
+    .map((d) => ({ d, n: firstLine.split(d).length }))
     .sort((a, b) => b.n - a.n)[0].d
 
-  const headers = splitLine(header, delim)
+  // Quote-aware parse of the whole file, then drop fully-empty records.
+  const records = parseRecords(clean, delim).filter((r) => r.some((c) => c.length > 0))
+  if (records.length < 2) return { created: 0, skipped: 0 }
+
+  const headers = records[0]
   const colOf = new Map<number, Col>()
   const taken = new Set<Col>()
   headers.forEach((h, i) => {
@@ -107,8 +119,7 @@ export function importCsvText(text: string): { created: number; skipped: number 
 
   let created = 0
   let skipped = 0
-  for (const line of lines.slice(1)) {
-    const cells = splitLine(line, delim)
+  for (const cells of records.slice(1)) {
     const val = (c: Col): string => {
       for (const [i, col] of colOf) if (col === c) return cells[i] ?? ''
       return ''
@@ -146,8 +157,13 @@ export function importCsvText(text: string): { created: number; skipped: number 
       callName: val('callName') || null,
       notes: val('notes') || null
     }
-    People.create(input)
-    created++
+    // One malformed row must not abort the whole bulk import.
+    try {
+      People.create(input)
+      created++
+    } catch {
+      skipped++
+    }
   }
   return { created, skipped }
 }

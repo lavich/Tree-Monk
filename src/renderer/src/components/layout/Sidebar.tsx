@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  Accessibility,
   ClipboardList,
   Calendar,
   Code2,
@@ -22,7 +23,6 @@ import {
   Settings,
   ShieldAlert,
   SlidersHorizontal,
-  Sparkles,
   Users
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -53,6 +53,49 @@ import {
 /** Feedback goes straight to the developer's inbox — no third-party form. */
 const FEEDBACK_MAILTO = 'mailto:barkattila@gmail.com?subject=TreeMonk'
 
+/** Compact labelled row for the accessibility flyout. */
+function A11yRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+      {children}
+    </div>
+  )
+}
+
+/** A tiny segmented control that does NOT close the flyout on click. */
+function A11ySeg<T extends string>({
+  value,
+  options,
+  onChange
+}: {
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-1 rounded-lg bg-secondary/50 p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={(e) => {
+            e.preventDefault()
+            onChange(o.value)
+          }}
+          className={cn(
+            'flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+            value === o.value
+              ? 'bg-background text-foreground shadow-sm ring-1 ring-primary/20'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 const ITEMS: { view: View; icon: typeof Search; labelKey: string }[] = [
   { view: 'board', icon: Search, labelKey: 'nav.board' },
   { view: 'dashboard', icon: LayoutDashboard, labelKey: 'nav.dashboard' },
@@ -66,7 +109,7 @@ const ITEMS: { view: View; icon: typeof Search; labelKey: string }[] = [
   { view: 'research', icon: ClipboardList, labelKey: 'nav.research' },
   { view: 'todos', icon: ListChecks, labelKey: 'nav.todos' },
   { view: 'calendar', icon: Calendar, labelKey: 'nav.calendar' },
-  { view: 'changelog', icon: Sparkles, labelKey: 'nav.changelog' },
+  // 'changelog' ("What's new") moved into Settings → a tab there, not a nav item.
   { view: 'audit', icon: History, labelKey: 'nav.audit' }
 ]
 
@@ -91,6 +134,15 @@ export function Sidebar(): JSX.Element {
   }, [pluginsNonce])
   const collapsed = useSettings((s) => s.sidebarCollapsed)
   const setCollapsed = useSettings((s) => s.setSidebarCollapsed)
+  const fontSize = useSettings((s) => s.fontSize)
+  const setFontSize = useSettings((s) => s.setFontSize)
+  const contrast = useSettings((s) => s.contrast)
+  const setContrast = useSettings((s) => s.setContrast)
+  const animations = useSettings((s) => s.animations)
+  const setAnimations = useSettings((s) => s.setAnimations)
+  const reduceEffects = useSettings((s) => s.reduceEffects)
+  const setReduceEffects = useSettings((s) => s.setReduceEffects)
+  const a11yActive = contrast === 'high' || fontSize !== 'medium' || !animations || reduceEffects
   const [supportOpen, setSupportOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [issueCount, setIssueCount] = useState(0)
@@ -358,6 +410,75 @@ export function Sidebar(): JSX.Element {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+
+          {/* Accessibility flyout — opens to the side like plugins. Contrast,
+              text size and motion/effect controls (shared with Settings). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                data-testid="nav-accessibility-flyout"
+                title={collapsed ? t('a11y.title') : undefined}
+                className={cn(
+                  'relative flex h-10 items-center rounded-xl text-muted-foreground transition-all duration-200 hover:bg-accent/60 hover:text-foreground',
+                  collapsed ? 'w-10 justify-center' : 'w-full gap-3 px-3',
+                  a11yActive && 'text-primary'
+                )}
+              >
+                <Accessibility className="h-[18px] w-[18px] shrink-0" />
+                {!collapsed && <span className="truncate text-sm font-medium">{t('a11y.title')}</span>}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="right" align="end" className="w-72 space-y-2.5 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold">
+                <Accessibility className="h-4 w-4 text-primary" /> {t('a11y.title')}
+              </div>
+
+              <A11yRow label={t('a11y.contrast')}>
+                <A11ySeg
+                  value={contrast}
+                  onChange={(v) => setContrast(v)}
+                  options={[
+                    { value: 'normal', label: t('a11y.contrastNormal') },
+                    { value: 'high', label: t('a11y.contrastHigh') }
+                  ]}
+                />
+              </A11yRow>
+
+              <A11yRow label={t('settings.fontSize')}>
+                <A11ySeg
+                  value={fontSize}
+                  onChange={(v) => setFontSize(v)}
+                  options={[
+                    { value: 'small', label: t('settings.small') },
+                    { value: 'medium', label: t('settings.medium') },
+                    { value: 'large', label: t('settings.large') }
+                  ]}
+                />
+              </A11yRow>
+
+              <A11yRow label={t('settings.animations')}>
+                <A11ySeg
+                  value={animations ? 'on' : 'off'}
+                  onChange={(v) => setAnimations(v === 'on')}
+                  options={[
+                    { value: 'on', label: t('common.yes') },
+                    { value: 'off', label: t('common.no') }
+                  ]}
+                />
+              </A11yRow>
+
+              <A11yRow label={t('settings.reduceEffects')}>
+                <A11ySeg
+                  value={reduceEffects ? 'on' : 'off'}
+                  onChange={(v) => setReduceEffects(v === 'on')}
+                  options={[
+                    { value: 'off', label: t('common.no') },
+                    { value: 'on', label: t('common.yes') }
+                  ]}
+                />
+              </A11yRow>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {collapsed ? (
             <>

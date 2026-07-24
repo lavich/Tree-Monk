@@ -25,11 +25,26 @@ export function GivenNamesEditor({
   const [draft, setDraft] = useState('')
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // The value we just wrote ourselves — so the value-change effect can tell an
+  // OWN commit (keep the draft) from an EXTERNAL change / person switch (clear it).
+  const justCommitted = useRef<string | null>(null)
 
-  // A person switch mid-typing must not leak the draft to the next person.
-  useEffect(() => setDraft(''), [value])
+  // A person switch mid-typing must not leak the draft to the next person — but
+  // our own commits (e.g. Backspace pulling the last chip back for editing) echo
+  // back through `value` and must NOT wipe the draft we just set.
+  useEffect(() => {
+    if (justCommitted.current !== null && value.trim() === justCommitted.current) {
+      justCommitted.current = null
+      return
+    }
+    setDraft('')
+  }, [value])
 
-  const commit = (arr: string[]): void => onCommit(arr.filter(Boolean).join(' '))
+  const commit = (arr: string[]): void => {
+    const next = arr.filter(Boolean).join(' ')
+    justCommitted.current = next.trim()
+    onCommit(next)
+  }
 
   const addDraft = (): void => {
     const parts = draft.trim().split(/\s+/).filter(Boolean)

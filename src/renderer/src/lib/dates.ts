@@ -334,9 +334,20 @@ function formatCore(s: string, fmt: DateDisplayFormat): string {
   // Julian marker rides along: format the date part, re-append " (J)".
   const jm = /^(.*?)\s*\(J\)$/.exec(s)
   if (jm) return `${formatCore(jm[1].trim(), fmt)} (J)`
-  const m = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(s)
-  if (!m || fmt === 'iso') return s
+  const ISO = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/
+  let m = ISO.exec(s)
+  if (!m) {
+    // Not canonical ISO yet (e.g. a GEDCOM-imported "11 JAN 1906" or a legacy
+    // "12.01.2022"). Canonicalise ONCE so the chosen display format applies
+    // right away — no focus/blur round-trip needed, and every view (read-only
+    // labels + input fields) reformats live when the setting changes. Free-form
+    // text that isn't a recognisable date falls through and shows as-is.
+    const norm = normalizeDate(s)
+    m = norm ? ISO.exec(norm) : null
+    if (!m) return s
+  }
   const [, y, mo, d] = m
+  if (fmt === 'iso') return d ? `${y}-${mo}-${d}` : mo ? `${y}-${mo}` : y
   if (!mo) return y
   if (fmt === 'eu') return d ? `${d}.${mo}.${y}` : `${mo}.${y}`
   return d ? `${mo}/${d}/${y}` : `${mo}/${y}` // us

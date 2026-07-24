@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SlidersHorizontal } from 'lucide-react'
 import {
@@ -6,15 +6,22 @@ import {
   type FanColorMode,
   type FanSweep
 } from '@/store/usePedigreeSettings'
+import { CHART_FONTS, chartFontFamily, ensureChartFont, type FontCategory } from '@/lib/chartFonts'
 
 const SWEEPS: FanSweep[] = [360, 270, 180]
 const COLOR_MODES: FanColorMode[] = ['sex', 'generation', 'mono']
+const FONT_CATS: FontCategory[] = ['sans', 'serif', 'script', 'display']
 
 /** Compact popover with the fan-chart's look settings (sweep, colours, years). */
 export function FanOptions(): JSX.Element {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ped = usePedigreeSettings()
+
+  // Preload the selected font so the live preview renders in the real face.
+  useEffect(() => {
+    if (open) void ensureChartFont(ped.fanFont)
+  }, [open, ped.fanFont])
 
   return (
     <div className="relative">
@@ -51,6 +58,36 @@ export function FanOptions(): JSX.Element {
                 value={ped.fanColorMode}
                 onChange={(v) => ped.set({ fanColorMode: v })}
               />
+            </Field>
+
+            {/* Font */}
+            <Field label={t('tree.fanFont')}>
+              <select
+                value={ped.fanFont}
+                onChange={(e) => {
+                  const v = e.target.value
+                  void ensureChartFont(v)
+                  ped.set({ fanFont: v })
+                }}
+                className="h-8 w-full rounded-xl border border-input bg-transparent px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary/30"
+              >
+                {FONT_CATS.map((cat) => (
+                  <optgroup key={cat} label={t(`tree.fontCat_${cat}`)}>
+                    {CHART_FONTS.filter((f) => f.category === cat).map((f) => (
+                      <option key={f.key} value={f.key}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p
+                className="mt-1 truncate rounded-lg bg-muted/40 px-2 py-1.5 text-sm text-foreground"
+                style={{ fontFamily: chartFontFamily(ped.fanFont) }}
+                title="Árvíztűrő tükörfúrógép"
+              >
+                Árvíztűrő · 1850
+              </p>
             </Field>
 
             {/* Years toggle */}

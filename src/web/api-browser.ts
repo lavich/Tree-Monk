@@ -162,6 +162,14 @@ export function createDemoApi(): TreeMonkApi {
       dataUrl: async () => null,
       open: async () => {}
     },
+    regions: {
+      // The demo carries no tags; reads are empty and writes are blocked.
+      forDocument: async () => [],
+      forPerson: async () => [],
+      create: async () => blocked(),
+      update: async () => blocked(),
+      remove: async () => blocked()
+    },
     board: {
       get: async (boardId) => Board.get(boardId),
       saveNode: async () => blocked(),

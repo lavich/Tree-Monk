@@ -59,6 +59,8 @@ export function buildFanTreeSvg(
     .cornerRadius(2)
 
   const defsParts: string[] = []
+  // Embed the chosen (self-hosted) font so the standalone export renders it.
+  if (content.fanFontFaceCss) defsParts.push(`<style>${content.fanFontFaceCss}</style>`)
   const fills: string[] = []
   const labels: string[] = []
 
@@ -124,8 +126,10 @@ export function buildFanTreeSvg(
       : '') +
     `</text>`
 
+  // Single-quote the attribute: family strings carry double quotes ("EB Garamond").
+  const famAttr = content.fanFontFamily ? ` font-family='${content.fanFontFamily}'` : ''
   const inner =
-    `<g transform="translate(${cx},${cx})">` +
+    `<g transform="translate(${cx},${cx})"${famAttr}>` +
     fills.join('') +
     labels.join('') +
     center +

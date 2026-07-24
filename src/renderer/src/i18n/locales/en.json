@@ -20,6 +20,7 @@
     "dragHint": "Drag to reposition, use the slider to zoom.",
     "reset": "Reset to centre",
     "replace": "Replace photo",
+    "remove": "Remove photo",
     "none": "No photo uploaded."
   },
   "places": {
@@ -714,14 +715,43 @@
       "birthInFuture": "Birth date in the future",
       "parentBornAfterChild": "Parent born after their child",
       "burialBeforeDeath": "Burial before death",
-      "burialLongAfterDeath": "Burial long after death"
+      "burialLongAfterDeath": "Burial long after death",
+      "christeningBeforeBirth": "Christening before birth",
+      "christeningLongAfterBirth": "Christening long after birth",
+      "deathInFuture": "Death date in the future",
+      "missingSex": "Sex not recorded",
+      "nameHasAffix": "Title/suffix inside the name field",
+      "nameWhitespace": "Extra spaces in the name",
+      "unparsableDate": "Unrecognizable date",
+      "eventAfterDeath": "Event dated after death",
+      "eventBeforeBirth": "Event dated before birth",
+      "ownAncestor": "Person is their own ancestor",
+      "disconnected": "Not connected to anyone",
+      "duplicateCouple": "Same couple recorded twice",
+      "sexRoleMismatch": "Recorded sex doesn't match the parent role",
+      "marriedRelative": "Married to a close relative",
+      "spouseAgeGap": "Large age gap between spouses",
+      "marriedNameAsMaiden": "Married surname entered as maiden name",
+      "marriedBeforeBirth": "Marriage before birth",
+      "marriedTooYoung": "Married very young",
+      "tooManyChildren": "Unusually many children",
+      "parentlessFamily": "Family without parents",
+      "childBeforeMarriage": "Child born before the marriage",
+      "parentTooOld": "Parent unusually old at the birth",
+      "siblingSameName": "Siblings with the same first name",
+      "missingMediaFile": "Missing media file",
+      "parentsSwapped": "Parents swapped (husband/wife reversed)"
     },
     "fix": {
       "markDeceased": "Mark deceased",
       "markDeceasedTitle": "Mark as deceased",
       "markDeceasedConfirm": "Mark deceased",
       "deathDateOptional": "Death date (optional)",
-      "markDeceasedBody": "Mark {{name}} as deceased? You can optionally add a death date, or leave it blank."
+      "markDeceasedBody": "Mark {{name}} as deceased? You can optionally add a death date, or leave it blank.",
+      "swapParents": "Swap parents",
+      "moveParentSlot": "Move to the correct slot",
+      "swapDone": "Parents swapped.",
+      "moveDone": "Moved to the correct slot."
     }
   },
   "query": {
@@ -833,7 +863,10 @@
     "csvImported": "{{count}} people imported.",
     "indexExport": "Name & place index",
     "indexExportDesc": "Printable alphabetical name index and place index (who was born/married/died where) as a single HTML file.",
-    "indexExportBtn": "Indexes (HTML)"
+    "indexExportBtn": "Indexes (HTML)",
+    "sectionImportExport": "Import / Export",
+    "sectionApi": "Local API",
+    "sectionHelp": "Help & feedback"
   },
   "common": {
     "done": "Done",
@@ -1048,6 +1081,11 @@
     "fanColor_generation": "Generation",
     "fanColor_mono": "Mono",
     "fanYears": "Years",
+    "fanFont": "Font",
+    "fontCat_sans": "Sans-serif",
+    "fontCat_serif": "Serif",
+    "fontCat_script": "Script",
+    "fontCat_display": "Display",
     "recenter": "Center here",
     "collapse": "Collapse",
     "expandAncestors": "Show ancestors",
@@ -1360,6 +1398,11 @@
     "prev": "Previous",
     "next": "Next",
     "notImage": "This document couldn't be shown as an image.",
+    "tagPeople": "Tag people",
+    "tagHint": "Drag a box around a face / person",
+    "tagAssign": "Who is this?",
+    "tagLabelOnly": "or just a label…",
+    "tagRemove": "Remove tag",
     "openInBrowser": "Open in browser",
     "kind": "Kind",
     "viewer": "Viewer",
@@ -2076,7 +2119,8 @@
       "death": "Death",
       "burial": "Burial",
       "other": "Other"
-    }
+    },
+    "controls": "Controls"
   },
   "researchView": {
     "title": "Research notes",
@@ -2157,5 +2201,11 @@
     "next": "Next",
     "back": "Back",
     "cancel": "Cancel"
+  },
+  "a11y": {
+    "title": "Accessibility",
+    "contrast": "Contrast",
+    "contrastNormal": "Normal",
+    "contrastHigh": "High"
   }
 }
