@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronUp, Link2, Plus, TreeDeciduous, UserPlus, Users } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
+import { usePedigreeSettings, labelStyle } from '@/store/usePedigreeSettings'
 import type { PedigreeCouple, PedigreePerson, Sex } from '@shared/types'
 import { PersonAvatar } from '@/components/common/PersonAvatar'
 import { cn, formatName } from '@/lib/utils'
@@ -119,6 +120,7 @@ function UprightPerson({
   const { t: tFs } = useTranslation()
   const fsTitle = tFs('fs.updateAvailable')
   const cardStyle = useCardStyle()
+  const labelStrength = usePedigreeSettings((s) => s.labelStrength)
   if (!person) {
     return (
       <div className="flex flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border/70 bg-card/40" style={{ width: w, height: h }}>
@@ -159,7 +161,7 @@ function UprightPerson({
         <PersonAvatar personId={person.id} name={display} sex={person.sex} className={compact ? 'h-9 w-9 text-xs' : 'h-12 w-12 text-sm'} />
       </div>
       <div className="w-full min-w-0 leading-tight">
-        <p className={cn('font-semibold', compact ? 'text-[10px]' : 'text-[11px]')} style={clamp2}>{display}</p>
+        <p className={cn('font-semibold', compact ? 'text-[10px]' : 'text-[11px]')} style={{ ...clamp2, ...labelStyle(labelStrength, compact ? 10 : 11) }}>{display}</p>
         <p className={cn('truncate text-muted-foreground', compact ? 'text-[9px]' : 'text-[10px]')}>{lifespan(person, living, deceased)}</p>
       </div>
     </button>

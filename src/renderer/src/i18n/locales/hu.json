@@ -1015,7 +1015,10 @@
     "empty": "Üres a tábla — adj hozzá egy elemet a felső sávból",
     "unverified": "Azonosítatlan",
     "addMap": "Térkép",
-    "mapSearchPlaceholder": "Cím vagy hely…"
+    "mapSearchPlaceholder": "Cím vagy hely…",
+    "clearThreads": "Összes szál törlése",
+    "clearBoard": "Tábla ürítése",
+    "clearBoardConfirm": "Törölsz minden kártyát és szálat erről a tábláról? Ez nem vonható vissza."
   },
   "tree": {
     "title": "Családfa",
@@ -1116,6 +1119,10 @@
     "cardBorderWidth": "Keret vastagság",
     "cardRadius": "Lekerekítés",
     "cardShadow": "Árnyék",
+    "labelStrength": "Feliratok",
+    "labelNormal": "Normál",
+    "labelBold": "Félkövér",
+    "labelStrong": "Erős",
     "saturation": "Telítettség",
     "vintage": "Vintage (szépia)",
     "kinCommonAncestor": "Közös ős"
@@ -1955,7 +1962,8 @@
     "badgeNew": "Új",
     "badgeCurrent": "Jelenlegi",
     "badgePre": "Előzetes",
-    "viewOnGithub": "Megnyitás a GitHubon"
+    "viewOnGithub": "Megnyitás a GitHubon",
+    "storeNotice": "Ha a TreeMonköt a Microsoft Store-ból telepítetted, a frissítések ott a Store ellenőrzése miatt később érkezhetnek — a közvetlen letöltések (GitHub / weboldal) általában előbb kapják meg az új verziót."
   },
   "collaboration": {
     "title": "Együttműködés"

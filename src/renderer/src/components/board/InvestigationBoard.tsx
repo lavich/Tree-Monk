@@ -170,6 +170,10 @@ function BoardCanvas(): JSX.Element {
     e.preventDefault()
     setMenu({ type: 'edge', id: edge.id, x: e.clientX, y: e.clientY })
   }, [])
+  const onPaneContextMenu = useCallback((e: MouseEvent | React.MouseEvent): void => {
+    e.preventDefault()
+    setMenu({ type: 'pane', id: '', x: e.clientX, y: e.clientY })
+  }, [])
 
   const isEmpty = loaded && nodes.length === 0
 
@@ -209,6 +213,7 @@ function BoardCanvas(): JSX.Element {
           onConnectEnd={() => setConnecting(false)}
           onNodeContextMenu={onNodeContextMenu}
           onEdgeContextMenu={onEdgeContextMenu}
+          onPaneContextMenu={onPaneContextMenu}
           onEdgeClick={(e, edge) => setMenu({ type: 'edge', id: edge.id, x: e.clientX, y: e.clientY })}
           onNodeClick={(_, node) => setSpotlight(node.type === 'zone' ? null : node.id)}
           onPaneClick={() => {

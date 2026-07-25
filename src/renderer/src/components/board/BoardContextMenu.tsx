@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Maximize2, Palette, Pencil, Tag, Trash2, Waypoints } from 'lucide-react'
+import { Eraser, Maximize2, Palette, Pencil, Tag, Trash2, Unlink, Waypoints } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useBoardStore } from './useBoardStore'
 import type { EdgeCertainty } from '@shared/types'
 
 export interface MenuState {
-  type: 'node' | 'edge'
+  type: 'node' | 'edge' | 'pane'
   id: string
   x: number
   y: number
@@ -38,6 +38,10 @@ export function BoardContextMenu({
   const { t } = useTranslation()
   const removeNode = useBoardStore((s) => s.removeNode)
   const removeEdge = useBoardStore((s) => s.removeEdge)
+  const clearThreads = useBoardStore((s) => s.clearThreads)
+  const clearBoard = useBoardStore((s) => s.clearBoard)
+  const edgeCount = useBoardStore((s) => s.edges.length)
+  const nodeCount = useBoardStore((s) => s.nodes.length)
   const setEdgeColor = useBoardStore((s) => s.setEdgeColor)
   const setEdgeCertainty = useBoardStore((s) => s.setEdgeCertainty)
   const setEdgeLabel = useBoardStore((s) => s.setEdgeLabel)
@@ -182,6 +186,29 @@ export function BoardContextMenu({
             <div className="my-1 h-px bg-border" />
             <button className="ctx-item text-destructive" onClick={() => { removeEdge(menu.id); onClose() }}>
               <Trash2 className="h-3.5 w-3.5" /> {t('common.delete')}
+            </button>
+          </>
+        )}
+
+        {menu.type === 'pane' && (
+          <>
+            <button
+              className="ctx-item disabled:opacity-40"
+              disabled={edgeCount === 0}
+              onClick={() => { clearThreads(); onClose() }}
+            >
+              <Unlink className="h-3.5 w-3.5" /> {t('board.clearThreads')}
+            </button>
+            <div className="my-1 h-px bg-border" />
+            <button
+              className="ctx-item text-destructive disabled:opacity-40"
+              disabled={nodeCount === 0 && edgeCount === 0}
+              onClick={() => {
+                if (window.confirm(t('board.clearBoardConfirm'))) clearBoard()
+                onClose()
+              }}
+            >
+              <Eraser className="h-3.5 w-3.5" /> {t('board.clearBoard')}
             </button>
           </>
         )}

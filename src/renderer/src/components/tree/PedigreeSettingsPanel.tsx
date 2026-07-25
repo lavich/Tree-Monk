@@ -7,6 +7,7 @@ import {
   CARD_BORDERS,
   PEDIGREE_ACCENTS,
   usePedigreeSettings,
+  type LabelStrength,
   type PedigreeValues
 } from '@/store/usePedigreeSettings'
 
@@ -141,6 +142,18 @@ export function PedigreeSettingsPanel(): JSX.Element {
             value={ped.cardShadow}
             onChange={(v) => ped.set({ cardShadow: v })}
           />
+          <div className="space-y-1.5">
+            <span className="text-[11px] text-muted-foreground">{t('tree.labelStrength')}</span>
+            <Segmented
+              options={[
+                { value: 'normal', label: t('tree.labelNormal') },
+                { value: 'bold', label: t('tree.labelBold') },
+                { value: 'strong', label: t('tree.labelStrong') }
+              ]}
+              value={ped.labelStrength}
+              onChange={(v) => ped.set({ labelStrength: v as LabelStrength })}
+            />
+          </div>
         </div>
 
         <div className="border-t border-border/40 pt-3">
@@ -301,6 +314,34 @@ function Swatches({
           </label>
         )}
       </div>
+    </div>
+  )
+}
+
+function Segmented({
+  options,
+  value,
+  onChange
+}: {
+  options: { value: string; label: string }[]
+  value: string
+  onChange: (v: string) => void
+}): JSX.Element {
+  return (
+    <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+            value === o.value
+              ? 'bg-card text-foreground shadow-sm ring-1 ring-primary/20'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   )
 }

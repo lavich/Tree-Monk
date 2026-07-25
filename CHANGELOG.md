@@ -2,6 +2,29 @@
 
 All notable changes to TreeMonk are documented here.
 
+## [1.8.14]
+
+### Added
+- **Optional label emphasis for the card family tree** (`usePedigreeSettings.labelStrength`:
+  `normal` | `bold` | `strong`, default `normal`): an inline style that bumps both
+  font-weight and font-size of the person name so names stay legible when zoomed
+  out. Applied to the landscape, portrait and descendant card views. Opt-in — the
+  default look is unchanged for everyone.
+- **Investigation Board — empty-pane context menu** with "Remove all threads" and
+  "Clear board", so stuck connections can always be removed.
+- **"What's new" page: Microsoft Store update notice** — a banner explaining that
+  Store installs may receive updates later than direct/GitHub downloads.
+
+### Fixed
+- **Investigation Board self-heals orphan threads**: on load, any edge whose
+  endpoint node no longer exists is dropped from state and the DB (React Flow
+  can't render or select such an edge, so it used to linger as an invisible,
+  un-removable "thread").
+- **Fewer false positives in data checks**: `disconnected` now counts godparent /
+  witness / event-participant links; `childBeforeMarriage` skips illegitimate and
+  non-birth (adopted/step) relationships; `siblingSameName` skips necronyms (one
+  child died before the other was born).
+
 ## [1.8.13]
 
 ### Added

@@ -21,6 +21,7 @@ import { useAppStore } from '@/store/useAppStore'
 import type { PedigreeCouple, PedigreePerson, Sex } from '@shared/types'
 import { PersonAvatar } from '@/components/common/PersonAvatar'
 import { cn, formatName } from '@/lib/utils'
+import { usePedigreeSettings, labelStyle } from '@/store/usePedigreeSettings'
 import { useDateFormat } from '@/hooks/useDateFormat'
 import { KinshipContext, useKinshipNote } from './kinshipContext'
 import { PanZoom, useTreeLod } from './PanZoom'
@@ -931,6 +932,8 @@ function PersonRow({
   const fsChange = useAppStore((s) => (person ? s.fsChanges[person.id] : undefined))
   const { t: tFs } = useTranslation()
   const fsTitle = tFs('fs.updateAvailable')
+  // Opt-in bigger / bolder name labels (default 'normal' → no change).
+  const labelStrength = usePedigreeSettings((s) => s.labelStrength)
   if (!person) {
     return (
       <div className="flex h-[42px] items-center gap-2 px-2.5 text-xs text-muted-foreground/50">
@@ -1005,7 +1008,10 @@ function PersonRow({
               <TreeDeciduous className="h-2.5 w-2.5" />
             </span>
           )}
-          <span className="truncate text-[13px] font-semibold leading-tight hover:text-primary">
+          <span
+            className="truncate text-[13px] font-semibold leading-tight hover:text-primary"
+            style={labelStyle(labelStrength, 13)}
+          >
             {display}
           </span>
           {person.docs > 0 && (

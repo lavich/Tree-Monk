@@ -63,6 +63,22 @@ export type TreeViewKind = 'landscape' | 'portrait' | 'fan' | 'descendants'
 export type FanSweep = 360 | 270 | 180
 /** Fan wedge colouring. */
 export type FanColorMode = 'sex' | 'generation' | 'mono'
+/** Card-tree name label emphasis — opt-in, for readability when zoomed out. */
+export type LabelStrength = 'normal' | 'bold' | 'strong'
+
+/** Inline style overrides for a person NAME label at a given strength. Applied
+ *  as `style` (guaranteed to win over the base class, unlike font-weight classes
+ *  that render identically on a system font without heavy weights). Bumps BOTH
+ *  weight AND size — the size increase is what actually keeps names legible when
+ *  the tree is zoomed out. `baseSizePx` is the view's normal name size. 'normal'
+ *  returns nothing → the shipped look is unchanged. */
+export function labelStyle(
+  s: LabelStrength,
+  baseSizePx: number
+): { fontWeight?: number; fontSize?: number } {
+  if (s === 'normal') return {}
+  return { fontWeight: s === 'strong' ? 800 : 700, fontSize: baseSizePx + (s === 'strong' ? 2 : 1) }
+}
 
 /** The persisted, user-tweakable look of the pedigree canvas. */
 export interface PedigreeValues {
@@ -79,6 +95,8 @@ export interface PedigreeValues {
   /** Fan chart label font — a key from the local chart-font catalogue
    *  (`'system'` = the default Inter/system stack). See lib/chartFonts. */
   fanFont: string
+  /** Card-tree name emphasis (opt-in bolder/higher-contrast labels). */
+  labelStrength: LabelStrength
   /** Horizontal spacing between generations (px). */
   colGap: number
   /** Vertical spacing between sibling cards (px). */
@@ -127,6 +145,7 @@ const DEFAULTS: PedigreeValues = {
   fanColorMode: 'sex',
   fanShowYears: true,
   fanFont: 'system',
+  labelStrength: 'normal',
   colGap: 320,
   rowGap: 188,
   accent: PEDIGREE_ACCENTS[0].color,

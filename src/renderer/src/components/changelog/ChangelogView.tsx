@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ExternalLink, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { ExternalLink, Loader2, RefreshCw, Sparkles, Store } from 'lucide-react'
 import type { ReleaseEntry } from '@shared/types'
 import { cn } from '@/lib/utils'
 import { localizeReleaseNotes } from '@/lib/releaseNotes'
@@ -96,6 +96,13 @@ export function ChangelogView(): JSX.Element {
           </div>
         ) : (
           <div className="mx-auto max-w-3xl">
+            {/* Store users can lag behind: Store review + rollout means the new
+                version shows up here later than on GitHub/direct downloads. */}
+            <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sm text-sky-800 dark:text-sky-300">
+              <Store className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{t('changelog.storeNotice')}</span>
+            </div>
+
             {newerCount > 0 && (
               <div className="mb-5 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-medium text-amber-700 dark:text-amber-400">
                 <Sparkles className="h-4 w-4 shrink-0" />

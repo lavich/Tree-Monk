@@ -1015,7 +1015,10 @@
     "empty": "The board is empty — add an element from the top bar",
     "unverified": "Unverified",
     "addMap": "Map",
-    "mapSearchPlaceholder": "Address or place…"
+    "mapSearchPlaceholder": "Address or place…",
+    "clearThreads": "Remove all threads",
+    "clearBoard": "Clear board",
+    "clearBoardConfirm": "Remove every card and thread from this board? This cannot be undone."
   },
   "tree": {
     "title": "Family Tree",
@@ -1116,6 +1119,10 @@
     "cardBorderWidth": "Frame width",
     "cardRadius": "Corner radius",
     "cardShadow": "Shadow",
+    "labelStrength": "Labels",
+    "labelNormal": "Normal",
+    "labelBold": "Bold",
+    "labelStrong": "Strong",
     "saturation": "Saturation",
     "vintage": "Vintage (sepia)",
     "kinCommonAncestor": "Common ancestor"
@@ -1958,7 +1965,8 @@
     "badgeNew": "New",
     "badgeCurrent": "Current",
     "badgePre": "Pre-release",
-    "viewOnGithub": "Open on GitHub"
+    "viewOnGithub": "Open on GitHub",
+    "storeNotice": "If you installed TreeMonk from the Microsoft Store, updates may arrive later there because of Store review — direct downloads (GitHub / website) usually get new versions first."
   },
   "collaboration": {
     "title": "Collaboration"

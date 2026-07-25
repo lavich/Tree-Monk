@@ -74,6 +74,10 @@ interface BoardStore {
   setEdgeCertainty: (id: string, certainty: EdgeCertainty) => void
   setEdgeLabel: (id: string, label: string | null) => void
   removeEdge: (id: string) => void
+  /** Remove every thread (edge) on the current board, keeping the nodes. */
+  clearThreads: () => void
+  /** Wipe the current board completely — every node and every thread. */
+  clearBoard: () => void
 
   addNote: (position: { x: number; y: number }) => void
   addPerson: (position: { x: number; y: number }, person?: { id: string; label: string }) => void
@@ -252,9 +256,16 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
 
   load: async () => {
     const state = await window.api.board.get(activeBoardId)
+    // Self-heal: drop any edge whose endpoint node is gone. React Flow can't
+    // render or select such an edge, so without this it would linger in the DB
+    // forever as an invisible, un-removable "thread". Purge it here (state + DB).
+    const nodeIds = new Set(state.nodes.map((n) => n.id))
+    const orphans = state.edges.filter((e) => !nodeIds.has(e.source) || !nodeIds.has(e.target))
+    for (const e of orphans) window.api.board.removeEdge(e.id)
+    const liveEdges = state.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
     set({
       nodes: state.nodes.map(toRfNode),
-      edges: state.edges.map(toRfEdge),
+      edges: liveEdges.map(toRfEdge),
       spotlightId: null,
       loaded: true
     })
@@ -454,6 +465,22 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   removeEdge: (id) => {
     set({ edges: get().edges.filter((e) => e.id !== id) })
     window.api.board.removeEdge(id)
+  },
+
+  clearThreads: () => {
+    const ids = get().edges.map((e) => e.id)
+    set({ edges: [] })
+    for (const id of ids) window.api.board.removeEdge(id)
+  },
+
+  clearBoard: () => {
+    const nodeIds = get().nodes.map((n) => n.id)
+    const edgeIds = get().edges.map((e) => e.id)
+    set({ nodes: [], edges: [], spotlightId: null })
+    // removeNode also drops the node's edges in the DB; clear any that were
+    // left unconnected (shouldn't happen, but keeps the table spotless).
+    for (const id of nodeIds) window.api.board.removeNode(id)
+    for (const id of edgeIds) window.api.board.removeEdge(id)
   },
 
   addNote: (position) => {

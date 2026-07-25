@@ -220,6 +220,40 @@ export function runSanityCheck(fileExists?: (path: string) => boolean): SanityIs
     }
   }
 
+  // A person also counts as "connected" via godparent / witness / shared-event
+  // links — not only family membership — so those aren't flagged as isolated.
+  for (const r of db
+    .prepare('SELECT person_id, godparent_id FROM godparents')
+    .all() as { person_id: string; godparent_id: string }[]) {
+    inAnyFamily.add(r.person_id)
+    inAnyFamily.add(r.godparent_id)
+  }
+  for (const r of db
+    .prepare('SELECT owner_type, owner_id, witness_id FROM witnesses')
+    .all() as { owner_type: string; owner_id: string; witness_id: string }[]) {
+    inAnyFamily.add(r.witness_id)
+    if (r.owner_type === 'person') inAnyFamily.add(r.owner_id)
+  }
+  for (const r of db
+    .prepare('SELECT person_id FROM event_participants')
+    .all() as { person_id: string }[]) {
+    inAnyFamily.add(r.person_id)
+  }
+
+  // Per-(family, child) relation — lets us exclude non-birth children
+  // (adopted / foster / step) from the "born before the marriage" notice.
+  const childRel = new Map<string, { fr: string | null; mr: string | null }>()
+  for (const r of db
+    .prepare('SELECT family_id, child_id, father_relation, mother_relation FROM family_children')
+    .all() as {
+    family_id: string
+    child_id: string
+    father_relation: string | null
+    mother_relation: string | null
+  }[]) {
+    childRel.set(`${r.family_id}|${r.child_id}`, { fr: r.father_relation, mr: r.mother_relation })
+  }
+
   /** Is `anc` a (transitive) ancestor of `desc`? Cycle-safe, depth-bounded. */
   const isAncestor = (anc: string, desc: string): boolean => {
     const seen = new Set<string>()
@@ -595,8 +629,12 @@ export function runSanityCheck(fileExists?: (path: string) => boolean): SanityIs
       const cb = decimalYear(c.birthDate) as number
 
       // Child born before the parents married (a notice — pre-marital birth or
-      // a wrong marriage date). Only when CERTAINLY before.
-      if (marrB && marrB.lo - cbb.hi > -1e-6) {
+      // a wrong marriage date). Only when CERTAINLY before, and NOT for cases
+      // where this is expected rather than an error: an illegitimate child, or a
+      // non-birth child (adopted / foster / step) of THIS family.
+      const rel = childRel.get(`${f.id}|${c.id}`)
+      const nonBirthChild = !!rel && ((!!rel.fr && rel.fr !== 'birth') || (!!rel.mr && rel.mr !== 'birth'))
+      if (marrB && marrB.lo - cbb.hi > -1e-6 && !c.illegitimate && !nonBirthChild) {
         issues.push({
           id: nid(),
           rule: 'childBeforeMarriage',
@@ -674,20 +712,33 @@ export function runSanityCheck(fileExists?: (path: string) => boolean): SanityIs
       }
     }
 
-    // Siblings sharing the same given name (necronym / possible duplicate).
+    // Siblings sharing the same given name. Skip the NECRONYM case (a child named
+    // after an earlier sibling who had already died) — that's a normal historical
+    // practice, not an error. Only flag when the two could have coexisted (so it's
+    // a likely duplicate / data slip).
+    const isNecronym = (a: Person, b: Person): boolean => {
+      const ad = dateBounds(a.deathDate)
+      const bb = dateBounds(b.birthDate)
+      const bd = dateBounds(b.deathDate)
+      const ab = dateBounds(a.birthDate)
+      // one died before the other was born (either order)
+      return (!!ad && !!bb && bb.lo - ad.hi > -1e-6) || (!!bd && !!ab && ab.lo - bd.hi > -1e-6)
+    }
     const givenSeen = new Map<string, Person>()
     for (const c of children) {
       const g = (c.givenName || '').trim().toLowerCase()
       if (!g) continue
       const prev = givenSeen.get(g)
       if (prev) {
-        issues.push({
-          id: nid(),
-          rule: 'siblingSameName',
-          severity: 'low',
-          detail: `${name(prev)} — ${name(c)}`,
-          people: ref(prev, c)
-        })
+        if (!isNecronym(prev, c)) {
+          issues.push({
+            id: nid(),
+            rule: 'siblingSameName',
+            severity: 'low',
+            detail: `${name(prev)} — ${name(c)}`,
+            people: ref(prev, c)
+          })
+        }
       } else {
         givenSeen.set(g, c)
       }

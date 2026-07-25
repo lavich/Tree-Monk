@@ -5,6 +5,7 @@ import type { TreeNodeDatum } from '@shared/types'
 import { cn, formatName } from '@/lib/utils'
 import { PersonAvatar } from '@/components/common/PersonAvatar'
 import { useTreeLod } from './PanZoom'
+import { usePedigreeSettings, labelStyle } from '@/store/usePedigreeSettings'
 
 const CARD_W = 210
 const CARD_H = 60
@@ -47,6 +48,7 @@ function DescendantTreeImpl({
   onSelect: (personId: string) => void
 }): JSX.Element {
   const lod = useTreeLod()
+  const labelStrength = usePedigreeSettings((s) => s.labelStrength)
   const downAt = useRef<{ x: number; y: number } | null>(null)
 
   const { nodes, links, width, height, minX, minY } = useMemo(() => {
@@ -124,7 +126,10 @@ function DescendantTreeImpl({
               className="h-9 w-9 shrink-0 text-[11px]"
             />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-semibold leading-tight group-hover:text-primary">
+              <span
+                className="block truncate text-[13px] font-semibold leading-tight group-hover:text-primary"
+                style={labelStyle(labelStrength, 13)}
+              >
                 {full}
               </span>
               <span className="block truncate text-[11px] leading-tight text-muted-foreground">

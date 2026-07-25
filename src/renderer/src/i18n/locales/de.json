@@ -1015,7 +1015,10 @@
     "empty": "Die Tafel ist leer — füge ein Element aus der oberen Leiste hinzu",
     "unverified": "Unbestätigt",
     "addMap": "Karte",
-    "mapSearchPlaceholder": "Adresse oder Ort…"
+    "mapSearchPlaceholder": "Adresse oder Ort…",
+    "clearThreads": "Alle Fäden entfernen",
+    "clearBoard": "Tafel leeren",
+    "clearBoardConfirm": "Alle Karten und Fäden von dieser Tafel entfernen? Das kann nicht rückgängig gemacht werden."
   },
   "tree": {
     "title": "Stammbaum",
@@ -1116,6 +1119,10 @@
     "cardBorderWidth": "Rahmenbreite",
     "cardRadius": "Eckenradius",
     "cardShadow": "Schatten",
+    "labelStrength": "Beschriftung",
+    "labelNormal": "Normal",
+    "labelBold": "Fett",
+    "labelStrong": "Kräftig",
     "saturation": "Sättigung",
     "vintage": "Vintage (Sepia)",
     "kinCommonAncestor": "Gemeinsamer Vorfahre"
@@ -1955,7 +1962,8 @@
     "badgeNew": "Neu",
     "badgeCurrent": "Aktuell",
     "badgePre": "Vorabversion",
-    "viewOnGithub": "Auf GitHub öffnen"
+    "viewOnGithub": "Auf GitHub öffnen",
+    "storeNotice": "Wenn du TreeMonk aus dem Microsoft Store installiert hast, können Updates dort wegen der Store-Prüfung später eintreffen — direkte Downloads (GitHub / Website) erhalten neue Versionen meist zuerst."
   },
   "collaboration": {
     "title": "Zusammenarbeit"
