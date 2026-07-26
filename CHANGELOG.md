@@ -2,6 +2,23 @@
 
 All notable changes to TreeMonk are documented here.
 
+## [1.8.15]
+
+### Added
+- **Visible father/mother roles on the profile**: small role chips in the parents
+  (Apa/Anya) and marriage (Férj/Feleség) sections show which family slot each
+  person occupies. When a slot contradicts the person's recorded sex (what the
+  data-issues "swapped roles" check flags), the chip turns amber with a warning
+  tooltip and a ⇄ button swaps the roles in place (undoable) — the same
+  operation as the one-click fix in Data issues, now reachable right where the
+  problem is visible.
+
+### Fixed
+- **Adding a new parent now shows up immediately**: `fillParent` only refreshed
+  families, not people, so a newly created father/mother wasn't in the people
+  map and the slot kept showing the "add" button as if nothing happened —
+  inviting duplicate parents. Now both stores refresh.
+
 ## [1.8.14]
 
 ### Added

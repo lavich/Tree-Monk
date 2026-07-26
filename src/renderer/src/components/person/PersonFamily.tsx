@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Baby, Unlink2, Check, Heart, Pencil, UserPlus, Users } from 'lucide-react'
+import { ArrowLeftRight, Baby, Unlink2, Check, Heart, Pencil, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DateInput } from '@/components/common/DateInput'
@@ -273,6 +273,7 @@ export function PersonFamily({ person }: { person: Person }): JSX.Element {
   const people = useAppStore((s) => s.people)
   const families = useAppStore((s) => s.families)
   const refreshFamilies = useAppStore((s) => s.refreshFamilies)
+  const refreshPeople = useAppStore((s) => s.refreshPeople)
   const selectPerson = useAppStore((s) => s.selectPerson)
   const byId = new Map(people.map((p) => [p.id, p]))
 
@@ -358,7 +359,11 @@ export function PersonFamily({ person }: { person: Person }): JSX.Element {
   )
   const fillParent = async (familyId: string, side: 'husbandId' | 'wifeId', pid: string): Promise<void> => {
     await window.api.families.update(familyId, { [side]: pid })
-    await refreshFamilies()
+    // Refresh people too: a NEWLY created parent must land in the people map or
+    // the slot keeps showing "add" as if nothing happened (and the user re-adds,
+    // duplicating them) — unlike child/spouse, adding a parent stays on this
+    // profile, so there's no selectPerson() to pull the new person in.
+    await Promise.all([refreshFamilies(), refreshPeople()])
   }
   const fillNewParent = async (
     familyId: string,
@@ -377,6 +382,27 @@ export function PersonFamily({ person }: { person: Person }): JSX.Element {
       marriagePlace: null
     })
     await refreshFamilies()
+  }
+
+  // The father/mother (husband/wife) SLOT a person occupies is otherwise
+  // invisible on the profile — the data-issues "swapped roles" check flags it,
+  // but there was nothing here to see or fix it with. Surface it: small role
+  // chips on the rows, an amber warning when a slot contradicts the person's
+  // recorded sex (U never contradicts), and a ⇄ swap — the same operation as
+  // the one-click fix in Data issues.
+  const slotMismatch = (p: Person | undefined, expected: Sex): boolean =>
+    !!p && p.sex !== 'U' && p.sex !== expected
+  const familyRolesMismatched = (f: Family): boolean =>
+    slotMismatch(f.husbandId ? byId.get(f.husbandId) : undefined, 'M') ||
+    slotMismatch(f.wifeId ? byId.get(f.wifeId) : undefined, 'F')
+  const swapRoles = async (f: Family): Promise<void> => {
+    const { husbandId, wifeId } = f
+    await window.api.families.update(f.id, { husbandId: wifeId ?? null, wifeId: husbandId ?? null })
+    await refreshFamilies()
+    toastUndo(t('person.rolesSwapped'), t('common.undo'), async () => {
+      await window.api.families.update(f.id, { husbandId: husbandId ?? null, wifeId: wifeId ?? null })
+      await refreshFamilies()
+    })
   }
   // An added-but-never-filled parent pair carries zero information — no
   // parents, only this child, no data. Ghost check for cleanup/removal.
@@ -570,6 +596,20 @@ export function PersonFamily({ person }: { person: Person }): JSX.Element {
               )}
             </h4>
             <span className="flex items-center gap-1.5">
+              {(pf.husbandId || pf.wifeId) && (
+                <button
+                  onClick={() => void swapRoles(pf)}
+                  title={t('person.swapRoles')}
+                  className={cn(
+                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors',
+                    familyRolesMismatched(pf)
+                      ? 'text-amber-500 hover:bg-amber-500/15'
+                      : 'text-muted-foreground/60 hover:bg-accent hover:text-foreground'
+                  )}
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                </button>
+              )}
               <ChildRelationControls family={pf} childId={person.id} />
               <button
                 onClick={() => (isEmptyParentPair(pf) ? void removeParentFamily(pf) : setUnlinkingParents(pf))}
@@ -584,10 +624,27 @@ export function PersonFamily({ person }: { person: Person }): JSX.Element {
             {([
               ['husbandId', pf.husbandId, t('person.addFather'), 'M'],
               ['wifeId', pf.wifeId, t('person.addMother'), 'F']
-            ] as ['husbandId' | 'wifeId', string | null, string, Sex][]).map(([side, pid, addLabel]) => {
+            ] as ['husbandId' | 'wifeId', string | null, string, Sex][]).map(([side, pid, addLabel, expected]) => {
               const parent = pid ? byId.get(pid) : undefined
+              const mismatch = slotMismatch(parent, expected)
               return parent ? (
-                <PersonRow key={side} p={parent} onClick={() => selectPerson(parent.id)} />
+                <div key={side} className="flex items-center gap-1 pr-2">
+                  <div className="min-w-0 flex-1">
+                    <PersonRow p={parent} onClick={() => selectPerson(parent.id)} />
+                  </div>
+                  <span
+                    title={mismatch ? t('person.roleMismatch') : undefined}
+                    className={cn(
+                      'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                      mismatch
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                        : 'bg-secondary/70 text-muted-foreground/70'
+                    )}
+                  >
+                    {t(side === 'husbandId' ? 'relation.father' : 'relation.mother')}
+                    {mismatch && ' ⚠'}
+                  </span>
+                </div>
               ) : (
                 <button
                   key={side}
@@ -684,6 +741,32 @@ export function PersonFamily({ person }: { person: Person }): JSX.Element {
                     <div className="min-w-0 flex-1">
                       <PersonRow p={spouse} onClick={() => selectPerson(spouse.id)} />
                     </div>
+                    {/* The spouse's recorded husband/wife slot — visible + swappable,
+                        amber when either partner sits in the wrong-sex slot. */}
+                    <span
+                      title={familyRolesMismatched(f) ? t('person.roleMismatch') : undefined}
+                      className={cn(
+                        'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                        familyRolesMismatched(f)
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                          : 'bg-secondary/70 text-muted-foreground/70'
+                      )}
+                    >
+                      {t(f.husbandId === spouse.id ? 'relation.husband' : 'relation.wife')}
+                      {familyRolesMismatched(f) && ' ⚠'}
+                    </span>
+                    <button
+                      onClick={() => void swapRoles(f)}
+                      title={t('person.swapRoles')}
+                      className={cn(
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors',
+                        familyRolesMismatched(f)
+                          ? 'text-amber-500 hover:bg-amber-500/15'
+                          : 'text-muted-foreground/60 hover:bg-accent hover:text-foreground'
+                      )}
+                    >
+                      <ArrowLeftRight className="h-4 w-4" />
+                    </button>
                     <button
                       onClick={() => setUnlinking(f)}
                       title={t('person.unlinkSpouse')}
@@ -693,12 +776,28 @@ export function PersonFamily({ person }: { person: Person }): JSX.Element {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setFillSpouseFor(f.id)}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
-                  >
-                    <UserPlus className="h-4 w-4" /> {t('person.addSpouse')}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setFillSpouseFor(f.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+                    >
+                      <UserPlus className="h-4 w-4" /> {t('person.addSpouse')}
+                    </button>
+                    {/* Lone partner in the wrong-sex slot (e.g. a man recorded as
+                        the wife) — the swap moves them to the right role. */}
+                    {slotMismatch(person, f.husbandId === person.id ? 'M' : 'F') && (
+                      <button
+                        onClick={() => void swapRoles(f)}
+                        title={t('person.roleMismatch')}
+                        className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-amber-500 transition-colors hover:bg-amber-500/15"
+                      >
+                        <ArrowLeftRight className="h-4 w-4" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wide">
+                          {t(f.husbandId === person.id ? 'relation.father' : 'relation.mother')} ⚠
+                        </span>
+                      </button>
+                    )}
+                  </div>
                 )}
                 <MarriageEditor family={f} />
                 {/* Marriage witnesses + union events share one row: while empty
