@@ -190,12 +190,13 @@ export function registerIpc(): void {
   )
   ipcMain.handle(Channels.documents.remove, (_e, id: string) => Documents.remove(id))
   ipcMain.handle(Channels.documents.restore, (_e, snap) => Documents.restore(snap))
-  ipcMain.handle(Channels.documents.attach, (_e, docId: string, pid: string) =>
-    Documents.attach(docId, pid)
+  ipcMain.handle(Channels.documents.attach, (_e, docId: string, pid: string, eventTag?: string | null) =>
+    Documents.attach(docId, pid, eventTag)
   )
   ipcMain.handle(Channels.documents.detach, (_e, docId: string, pid: string) =>
     Documents.detach(docId, pid)
   )
+  ipcMain.handle(Channels.documents.tagsForPerson, (_e, pid: string) => Documents.eventTagsForPerson(pid))
   ipcMain.handle(Channels.documents.dataUrl, (_e, id: string) => documentDataUrl(id))
   ipcMain.handle(Channels.documents.open, (_e, id: string) => openDocument(id))
 
@@ -298,6 +299,7 @@ export function registerIpc(): void {
     })
   })
   ipcMain.handle(Channels.research.deleteCitation, (_e, id: string) => Citations.remove(id))
+  ipcMain.handle(Channels.research.listSources, () => Sources.list())
   ipcMain.handle(Channels.research.notesForPerson, (_e, pid: string) => Notes.forOwner('person', pid))
   ipcMain.handle(Channels.research.logsForPerson, (_e, pid: string) => ResearchLogs.forPerson(pid))
   ipcMain.handle(Channels.research.allLogs, () => ResearchLogs.all())

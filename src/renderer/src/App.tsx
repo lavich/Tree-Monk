@@ -17,6 +17,7 @@ import { DocumentsView } from '@/components/documents/DocumentsView'
 import { IssuesView } from '@/components/issues/IssuesView'
 import { QueryView } from '@/components/query/QueryView'
 import { RelationshipView } from '@/components/kinship/RelationshipView'
+import { CollapseView } from '@/components/collapse/CollapseView'
 import { AuditView } from '@/components/audit/AuditView'
 import { ResearchView } from '@/components/research/ResearchView'
 import { TodosView } from '@/components/todos/TodosView'
@@ -71,6 +72,7 @@ function ViewRenderer(): JSX.Element {
       {view === 'issues' && <IssuesView />}
       {view === 'query' && <QueryView />}
       {view === 'kinship' && <RelationshipView />}
+      {view === 'collapse' && <CollapseView />}
       {view === 'research' && <ResearchView />}
       {view === 'todos' && <TodosView />}
       {view === 'audit' && <AuditView />}

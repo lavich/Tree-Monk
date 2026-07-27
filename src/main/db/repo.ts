@@ -260,6 +260,7 @@ export const People = {
       death_note: empty(e.deathNote) && input.deathNote ? input.deathNote : e.deathNote,
       christening_note: empty(e.christeningNote) && input.christeningNote ? input.christeningNote : e.christeningNote,
       burial_note: empty(e.burialNote) && input.burialNote ? input.burialNote : e.burialNote,
+      notes: empty(e.notes) && input.notes ? input.notes : e.notes,
       fs_id: e.fsId ?? input.fsId ?? null,
       gedcom_id: e.gedcomId ?? input.gedcomId ?? null
     }
@@ -286,6 +287,7 @@ export const People = {
       next.death_note !== e.deathNote ||
       next.christening_note !== e.christeningNote ||
       next.burial_note !== e.burialNote ||
+      next.notes !== e.notes ||
       next.fs_id !== e.fsId ||
       next.gedcom_id !== e.gedcomId
     if (!changed) return false
@@ -297,7 +299,7 @@ export const People = {
           burial_date=@burial_date, burial_place=@burial_place,
           christening_date=@christening_date, christening_place=@christening_place, religion=@religion,
           birth_note=@birth_note, death_note=@death_note, christening_note=@christening_note, burial_note=@burial_note,
-          fs_id=@fs_id, gedcom_id=@gedcom_id, updated_at=@updated_at WHERE id=@id`
+          notes=@notes, fs_id=@fs_id, gedcom_id=@gedcom_id, updated_at=@updated_at WHERE id=@id`
       )
       .run({ id, ...next, updated_at: now() })
     return true
@@ -789,8 +791,14 @@ export const Documents = {
   remove(id: string): DocumentSnapshot | null {
     const doc = this.get(id)
     if (!doc) return null
+    // Preserve the per-person fact tags so an undo restores them too.
+    const eventTags: Record<string, string | null> = {}
+    const tagRows = getDb()
+      .prepare('SELECT person_id, event_tag FROM person_documents WHERE document_id = ?')
+      .all(id) as { person_id: string; event_tag: string | null }[]
+    for (const r of tagRows) eventTags[r.person_id] = r.event_tag
     getDb().prepare('DELETE FROM documents WHERE id = ?').run(id)
-    return { document: doc }
+    return { document: doc, eventTags }
   },
   restore(snap: DocumentSnapshot): void {
     const d = snap.document
@@ -806,13 +814,32 @@ export const Documents = {
       },
       d.id
     )
+    for (const [pid, tag] of Object.entries(snap.eventTags ?? {})) {
+      if (tag) this.attach(d.id, pid, tag)
+    }
   },
-  attach(documentId: string, personId: string): void {
+  attach(documentId: string, personId: string, eventTag?: string | null): void {
+    if (eventTag === undefined) {
+      // Plain attach: never touches an existing row's event tag.
+      getDb()
+        .prepare('INSERT OR IGNORE INTO person_documents (person_id, document_id) VALUES (?, ?)')
+        .run(personId, documentId)
+      return
+    }
     getDb()
       .prepare(
-        'INSERT OR IGNORE INTO person_documents (person_id, document_id) VALUES (?, ?)'
+        `INSERT INTO person_documents (person_id, document_id, event_tag) VALUES (?, ?, ?)
+         ON CONFLICT(person_id, document_id) DO UPDATE SET event_tag = excluded.event_tag`
       )
-      .run(personId, documentId)
+      .run(personId, documentId, eventTag)
+  },
+  /** Per-attachment event tags for one person (documentId → BIRT/DEAT/… or null). */
+  eventTagsForPerson(personId: string): { documentId: string; eventTag: string | null }[] {
+    return (
+      getDb()
+        .prepare('SELECT document_id, event_tag FROM person_documents WHERE person_id = ?')
+        .all(personId) as { document_id: string; event_tag: string | null }[]
+    ).map((r) => ({ documentId: r.document_id, eventTag: r.event_tag }))
   },
   detach(documentId: string, personId: string): void {
     getDb()
@@ -1222,6 +1249,28 @@ export const Repositories = {
 }
 
 export const Sources = {
+  /** Every source, title-ordered — the "attach an existing source" picker. */
+  list(): Source[] {
+    return (getDb().prepare('SELECT * FROM sources ORDER BY title COLLATE NOCASE').all() as {
+      id: string
+      gedcom_id: string | null
+      title: string
+      author: string | null
+      publication: string | null
+      repository_id: string | null
+      text: string | null
+      record_date: string | null
+    }[]).map((r) => ({
+      id: r.id,
+      gedcomId: r.gedcom_id,
+      title: r.title,
+      author: r.author,
+      publication: r.publication,
+      repositoryId: r.repository_id,
+      text: r.text,
+      recordDate: r.record_date
+    }))
+  },
   upsert(input: Omit<Source, 'id'> & { id?: string }): Source {
     const db = getDb()
     const existing = input.gedcomId

@@ -23,7 +23,8 @@ import {
   Settings,
   ShieldAlert,
   SlidersHorizontal,
-  Users
+  Users,
+  GitMerge
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -106,6 +107,7 @@ const ITEMS: { view: View; icon: typeof Search; labelKey: string }[] = [
   { view: 'issues', icon: ShieldAlert, labelKey: 'nav.issues' },
   { view: 'query', icon: Filter, labelKey: 'nav.query' },
   { view: 'kinship', icon: Route, labelKey: 'nav.kinship' },
+  { view: 'collapse', icon: GitMerge, labelKey: 'nav.collapse' },
   { view: 'research', icon: ClipboardList, labelKey: 'nav.research' },
   { view: 'todos', icon: ListChecks, labelKey: 'nav.todos' },
   { view: 'calendar', icon: Calendar, labelKey: 'nav.calendar' },

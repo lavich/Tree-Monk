@@ -2,6 +2,52 @@
 
 All notable changes to TreeMonk are documented here.
 
+## [1.8.16]
+
+### Added
+- **Pedigree-collapse (Ősvesztés) finder**: new sidebar view under Kinship that
+  walks the selected person's complete ancestor tree along EVERY path
+  (Ahnentafel/Sosa numbering, blood lines only, no dedup) and lists each
+  ancestor occupying 2+ Sosa positions with an ×n multiplier, generation info
+  and the classic implex %. The right-hand pan/zoom canvas draws all paths as a
+  single converging graph — shared segments once, junction points visible.
+- **Per-fact sources & documents**: a ＋ button next to the birth / christening /
+  death / burial blocks (profile + person panel) opens a modal to record a NEW
+  source, cite an EXISTING source (searchable picker, new `research:listSources`
+  IPC) or tie a DOCUMENT to the fact (file import or pick from the library).
+  `person_documents` gained a nullable `event_tag` column (idempotent ALTER —
+  existing DBs migrate untouched); the fact badge now counts citations and
+  fact-tagged documents together, documents open in the in-app viewer.
+- **Residence quick-fill**: residence events get "From birth" / "Until death"
+  buttons that fill the date fields from the person's own vital dates.
+- **GEDCOM: local media import**: `OBJE > FILE` entries pointing at local
+  absolute paths (Windows/UNC/POSIX, `file://` too — e.g. a MyHeritage media
+  folder) are now imported: files are copied into media storage (deterministic
+  doc id → idempotent re-import), `_PRIM Y` becomes the profile photo; dead
+  paths are skipped.
+
+### Fixed
+- **GEDCOM person notes were imported invisibly**: person-level NOTEs (inline
+  and @N@ pointer records — Ahnenblatt/Heredis/PAF) now land in the profile's
+  visible notes field (non-destructive merge on re-import via `fillFrom`), and
+  the export writes linked note records too — as proper multi-line CONT/CONC
+  structures instead of newline-flattened text.
+- **Microsoft Store build couldn't open PDFs/documents**: MSIX virtualizes
+  AppData writes into the package LocalCache, so external apps got a path that
+  doesn't exist for them. `openDocument` now maps the virtual path to its real
+  on-disk location before handing it to the OS.
+- **Visible scrollbars**: the shared ScrollArea's scrollbar had no width and
+  hover-only visibility — now 10px wide, always shown while content overflows
+  (every list view: Documents, People, Todos, Research…).
+- **Crisper text in the portrait tree view**: card positions snap to whole
+  pixels (the layout's centering math produced fractional offsets → blurry
+  glyphs), and PanZoom snaps its translate to integers at rest.
+
+### Changed
+- **Consistent Hungarian terminology**: web-link documents are now "Link"
+  everywhere (was "Hivatkozás", clashing with citations), citations are
+  "forráshivatkozás".
+
 ## [1.8.15]
 
 ### Added

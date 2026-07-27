@@ -173,13 +173,14 @@ function CitationCard({
 }
 
 /** Inline add/edit form for a source + its citation. Every field maps onto an
- *  existing column, so editing never requires a schema change. */
-function CitationForm({
+ *  existing column, so editing never requires a schema change. Also reused by
+ *  the per-fact "add source" modal (FactSources), which presets the event tag. */
+export function CitationForm({
   initial,
   onSave,
   onCancel
 }: {
-  initial?: CitationDetail | null
+  initial?: Partial<CitationDetail> | null
   onSave: (e: CitationEdit) => void | Promise<void>
   onCancel: () => void
 }): JSX.Element {

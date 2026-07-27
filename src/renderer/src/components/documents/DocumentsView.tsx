@@ -273,7 +273,7 @@ export function DocumentsView(): JSX.Element {
           </Button>
         </div>
       ) : (
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3 p-4">
             {shown.map((d) => (
               <DocumentThumb

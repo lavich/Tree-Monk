@@ -133,14 +133,14 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
     setAnomalies(issues.filter((i) => i.people.some((x) => x.id === personId)))
   }, [personId])
 
-  // Citations for the per-fact source chips (refreshed after a sync too).
+  // Citations for the per-fact source chips (refreshed after a sync too, and
+  // after adding a source straight from a fact block).
+  const reloadCites = useCallback(async () => {
+    setFactCites(personId ? await window.api.research.citationsForPerson(personId) : [])
+  }, [personId])
   useEffect(() => {
-    if (!personId) {
-      setFactCites([])
-      return
-    }
-    void window.api.research.citationsForPerson(personId).then(setFactCites)
-  }, [personId, personSyncNonce])
+    void reloadCites()
+  }, [reloadCites, personSyncNonce])
 
   useEffect(() => {
     void reload()
@@ -702,7 +702,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                       icon={Baby}
                       tint="text-emerald-600 dark:text-emerald-400"
                       title={t('person.birth')}
-                      action={<FactSources citations={factCites} tags={['BIRT', 'CHR']} label={t('person.birth')} />}
+                      action={<FactSources citations={factCites} tags={['BIRT', 'CHR']} label={t('person.birth')} personId={person.id} addTag="BIRT" onAdded={reloadCites} />}
                     >
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Field label={t('person.date')}>
@@ -736,7 +736,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                           >
                             <ArrowDownToLine className="h-3 w-3" />
                           </button>
-                          <FactSources citations={factCites} tags={['CHR']} label={t('person.christening')} />
+                          <FactSources citations={factCites} tags={['CHR']} label={t('person.christening')} personId={person.id} addTag="CHR" onAdded={reloadCites} />
                         </>
                       }
                     >
@@ -760,7 +760,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                       icon={Bird}
                       tint="text-slate-500 dark:text-slate-300"
                       title={t('person.death')}
-                      action={<FactSources citations={factCites} tags={['DEAT']} label={t('person.death')} />}
+                      action={<FactSources citations={factCites} tags={['DEAT']} label={t('person.death')} personId={person.id} addTag="DEAT" onAdded={reloadCites} />}
                     >
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Field label={t('person.date')}>
@@ -805,7 +805,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                       icon={Flower2}
                       tint="text-amber-700 dark:text-amber-400"
                       title={t('person.burial')}
-                      action={<FactSources citations={factCites} tags={['BURI']} label={t('person.burial')} />}
+                      action={<FactSources citations={factCites} tags={['BURI']} label={t('person.burial')} personId={person.id} addTag="BURI" onAdded={reloadCites} />}
                     >
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Field label={t('person.date')}>

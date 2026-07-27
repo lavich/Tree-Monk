@@ -789,6 +789,8 @@ export interface PersonSnapshot {
 /** A deleted document (the media file is kept on disk so it can be restored). */
 export interface DocumentSnapshot {
   document: DocumentRecord
+  /** Per-person fact tags of the attachments (personId → BIRT/DEAT/… or null). */
+  eventTags?: Record<string, string | null>
 }
 
 export interface BoardMeta {

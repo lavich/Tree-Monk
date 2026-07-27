@@ -137,6 +137,12 @@ function EventEditDialog({
   // custom/FS-derived type as its own option so it isn't lost on save.
   const options = types.includes(type as EventType) ? types : [type as EventType, ...types]
 
+  // Residence quick-fill: the owner's own birth/death dates, so "lived here
+  // from birth" / "until death" is one click instead of copying dates around.
+  const owner = ownerType === 'person' ? peopleById.get(ownerId) : undefined
+  const quickFrom = type === 'residence' ? owner?.birthDate ?? null : null
+  const quickTo = type === 'residence' && owner?.deceased ? owner?.deathDate ?? null : null
+
   const save = async (): Promise<void> => {
     const input = {
       type: type.trim() || 'other',
@@ -207,6 +213,30 @@ function EventEditDialog({
               <DateInput value={dateTo} onValueChange={setDateTo} className="h-9 text-sm" />
             </label>
           </div>
+          {(quickFrom || quickTo) && (
+            <div className="flex justify-end gap-1.5">
+              {quickFrom && (
+                <button
+                  type="button"
+                  onClick={() => setDate(quickFrom)}
+                  title={quickFrom}
+                  className="rounded-lg border border-border/40 px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
+                >
+                  {t('events.fromBirth')}
+                </button>
+              )}
+              {quickTo && (
+                <button
+                  type="button"
+                  onClick={() => setDateTo(quickTo)}
+                  title={quickTo}
+                  className="rounded-lg border border-border/40 px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
+                >
+                  {t('events.toDeath')}
+                </button>
+              )}
+            </div>
+          )}
           <label className="block space-y-1">
             <span className="text-xs font-medium text-muted-foreground">{t('person.notes')}</span>
             <Textarea value={note} onChange={(e) => setNote(e.target.value)} className="min-h-[64px] text-sm" />

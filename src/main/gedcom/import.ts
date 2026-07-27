@@ -1,7 +1,8 @@
-import { readFileSync } from 'fs'
+import { copyFileSync, existsSync, readFileSync } from 'fs'
+import { basename, extname, join } from 'path'
 import { isFamilySearchId } from '@shared/familysearch'
 import { mediaDocId } from '../mediaId'
-import { getDb } from '../db/connection'
+import { getDb, mediaDir } from '../db/connection'
 import { removeNamelessStubs } from '../db/admin'
 import { Aliases, Attributes, Citations, Documents, EventParticipants, Events, Families, Godparents, Notes, Occupations, People, Places, Repositories, Sources, Witnesses } from '../db/repo'
 import {
@@ -88,22 +89,47 @@ function eventNote(indi: GedNode, tag: string): string | null {
 }
 
 
-/** Collects the http(s) media URLs referenced by a record's `OBJE > FILE`
- *  children. `primary` marks the GEDCOM "preferred"/portrait image (`_PRIM Y`,
+/** Collects the media references of a record's `OBJE > FILE` children — both
+ *  http(s) URLs and LOCAL absolute paths (MyHeritage/Ahnenblatt GEDCOMs point
+ *  at a folder on disk; `file://` URLs are normalized to plain paths).
+ *  `primary` marks the GEDCOM "preferred"/portrait image (`_PRIM Y`,
  *  the Ancestry/FamilySearch extension), so it can become the profile photo. */
-function mediaUrls(node: GedNode): { url: string; title: string | null; primary: boolean }[] {
-  const out: { url: string; title: string | null; primary: boolean }[] = []
+function mediaUrls(
+  node: GedNode
+): { url: string; title: string | null; primary: boolean; remote: boolean }[] {
+  const out: { url: string; title: string | null; primary: boolean; remote: boolean }[] = []
   for (const obje of node.children) {
     if (obje.tag !== 'OBJE') continue
     const primary = /^y/i.test(childValue(obje, '_PRIM') ?? childValue(obje, '_PRIMARY') ?? '')
+    const title = childValue(obje, 'TITL')
     const files = obje.children.filter((c) => c.tag === 'FILE')
     const raws = files.length ? files.map((f) => f.value) : obje.value ? [obje.value] : []
     for (const raw of raws) {
       const url = raw.trim()
-      if (/^https?:\/\//i.test(url)) out.push({ url, title: childValue(obje, 'TITL'), primary })
+      if (!url) continue
+      if (/^https?:\/\//i.test(url)) {
+        out.push({ url, title, primary, remote: true })
+        continue
+      }
+      // file:///C:/x.jpg → C:/x.jpg; file://server/share stays a UNC-ish path.
+      const p = url.replace(/^file:\/\/\/?/i, '')
+      // Absolute Windows (C:\ or C:/), UNC (\\server) or POSIX (/home/…) path.
+      if (/^([A-Za-z]:[\\/]|\\\\|\/)/.test(p)) out.push({ url: p, title, primary, remote: false })
     }
   }
   return out
+}
+
+const LOCAL_MEDIA_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.pdf': 'application/pdf'
 }
 
 /** Imports a GEDCOM file into the database. Returns counts. */
@@ -143,12 +169,14 @@ export function importGedcomText(text: string): GedcomImportResult {
 
     // --- Notes (@N@ NOTE records) ---
     const noteByXref = new Map<string, string>()
+    const noteTextByXref = new Map<string, string>()
     for (const n of roots.filter((x) => x.tag === 'NOTE' && x.xref)) {
       const existing = Notes.findByGedcomId(n.xref!)
       const note = existing
         ? (Notes.create(n.value, n.xref, existing.id), existing)
         : Notes.create(n.value, n.xref)
       noteByXref.set(n.xref!, note.id)
+      noteTextByXref.set(n.xref!, n.value)
       result.notes++
     }
 
@@ -243,7 +271,7 @@ export function importGedcomText(text: string): GedcomImportResult {
       if (!targets.length) return
       let primaryPortrait: string | null = null // `_PRIM Y` flagged image
       let firstUntitled: string | null = null // first untitled image = the portrait
-      for (const { url, title, primary } of mediaUrls(node)) {
+      for (const { url, title, primary, remote } of mediaUrls(node)) {
         const docId = mediaDocId(url)
         const isImg = /\.(jpe?g|png|gif|webp|bmp|tiff?)(\?|$)/i.test(url)
         // Deterministic id makes this idempotent: an existing doc (possibly
@@ -252,13 +280,39 @@ export function importGedcomText(text: string): GedcomImportResult {
         const existing = Documents.get(docId)
         if (existing) {
           for (const pid of targets) Documents.attach(docId, pid)
-        } else {
+        } else if (remote) {
           Documents.create(
             {
               title: title ?? (isImg ? 'GEDCOM kép' : 'GEDCOM hivatkozás'),
               kind: isImg ? 'photo' : 'other',
               filePath: url,
               mimeType: 'text/uri-list',
+              personIds: targets
+            },
+            docId
+          )
+          result.documents++
+        } else {
+          // LOCAL file reference: copy it into media storage so the tree stays
+          // self-contained even if the referenced folder later moves. If the
+          // copy fails (locked / cloud placeholder error), reference the file
+          // in place — it still renders while the original path is valid.
+          if (!existsSync(url)) continue // dead path — skip silently
+          const ext = extname(url).toLowerCase()
+          let storedPath = url
+          try {
+            const dest = join(mediaDir(), `${docId}${ext}`)
+            if (!existsSync(dest)) copyFileSync(url, dest)
+            storedPath = dest
+          } catch {
+            /* keep the original path */
+          }
+          Documents.create(
+            {
+              title: title?.trim() || basename(url, extname(url)),
+              kind: isImg ? 'photo' : 'other',
+              filePath: storedPath,
+              mimeType: LOCAL_MEDIA_MIME[ext] ?? 'application/octet-stream',
               personIds: targets
             },
             docId
@@ -373,6 +427,16 @@ export function importGedcomText(text: string): GedcomImportResult {
       // Some exporters (FamilySearch) record the christening as a generic
       // `EVEN` with `TYPE Baptism/Christening` instead of a `CHR`/`BAPM` tag.
       const evenChristening = eventByType(indi, HANDLED_EVENT_TYPE)
+      // Person-level NOTEs (inline text or @N@ pointers) land in the visible
+      // profile notes field — that is where Ahnenblatt/Heredis/PAF & co. show
+      // them, so an import must not park them in an invisible side table only.
+      const noteParts: string[] = []
+      for (const c of indi.children) {
+        if (c.tag !== 'NOTE') continue
+        const text = /^@.+@$/.test(c.value) ? noteTextByXref.get(c.value) ?? '' : c.value
+        const t = text.trim()
+        if (t && !noteParts.includes(t)) noteParts.push(t)
+      }
       const input = {
         gedcomId: xref,
         // FamilySearch person id, so the default-root can be resolved post-import.
@@ -418,7 +482,7 @@ export function importGedcomText(text: string): GedcomImportResult {
         callName: nameNode
           ? childValue(nameNode, '_RUFNAME') ?? childValue(nameNode, 'RUFNAME')
           : null,
-        notes: null
+        notes: noteParts.length ? noteParts.join('\n\n') : null
       }
       // Match a stable id FIRST (fs_id), then the file-local xref. Existing
       // people are merged NON-destructively (curated fields are never wiped).

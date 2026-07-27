@@ -18,6 +18,7 @@ import {
   People,
   Places,
   ResearchLogs,
+  Sources,
   Todos,
   Witnesses
 } from '../main/db/repo'
@@ -159,6 +160,7 @@ export function createDemoApi(): TreeMonkApi {
       restore: async () => blocked(),
       attach: async () => blocked(),
       detach: async () => blocked(),
+      tagsForPerson: async (pid) => Documents.eventTagsForPerson(pid),
       dataUrl: async () => null,
       open: async () => {}
     },
@@ -187,6 +189,7 @@ export function createDemoApi(): TreeMonkApi {
     },
     research: {
       citationsForPerson: async (pid) => Citations.forOwner('person', pid),
+      listSources: async () => Sources.list(),
       addCitation: async () => blocked(),
       attachSourceToPerson: async () => blocked(),
       peopleForSource: async (sourceId) => Citations.peopleForSource(sourceId),

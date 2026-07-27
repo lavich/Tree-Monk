@@ -295,7 +295,7 @@ function FsCouple({
   }
 
   return (
-    <motion.div className="absolute" style={{ width: COUPLE_W, left: node.x - COUPLE_W / 2, top: node.y, height: CPL_H }}
+    <motion.div className="absolute" style={{ width: COUPLE_W, left: Math.round(node.x - COUPLE_W / 2), top: Math.round(node.y), height: CPL_H }}
       initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.85 }} transition={SPRING}>
       <div className="absolute top-7 z-0 h-px" style={{ left: hCx, width: wCx - hCx, background: 'hsl(var(--border))' }} />
       <div className="relative z-[1] flex items-start" style={{ gap: TILE_GAP }}>
@@ -810,7 +810,7 @@ export function PortraitChart({
           <AnimatePresence>
             {small.map((s) => (
               <motion.div key={s.key} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={SPRING}
-                className="absolute z-[5]" style={{ left: s.x - unitW(!!s.spouse) / 2, top: s.y }}>
+                className="absolute z-[5]" style={{ left: Math.round(s.x - unitW(!!s.spouse) / 2), top: Math.round(s.y) }}>
                 <SmallCard
                   person={s.person}
                   spouse={s.spouse}

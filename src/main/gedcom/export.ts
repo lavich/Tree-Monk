@@ -1,6 +1,6 @@
 import { writeFileSync, copyFileSync, mkdirSync, existsSync } from 'fs'
 import { dirname, extname, join } from 'path'
-import { Aliases, Attributes, Documents, EventParticipants, Events, Families, Godparents, Occupations, People, Witnesses } from '../db/repo'
+import { Aliases, Attributes, Documents, EventParticipants, Events, Families, Godparents, Notes, Occupations, People, Witnesses } from '../db/repo'
 import { resolveMediaPath } from '../db/connection'
 import type { Alias, DocumentRecord, EventRecord, Occupation, Person } from '@shared/types'
 
@@ -95,6 +95,32 @@ function eventPeriod(e: EventRecord): string | null {
 function flatNote(text: string | null | undefined): string | null {
   const s = (text ?? '').replace(/\s*\n\s*/g, ' ').trim()
   return s || null
+}
+
+/**
+ * Multi-line NOTE structure: newlines become CONT lines, and any logical line
+ * longer than the 5.5.1 limit is CONC-split. Split points avoid space edges —
+ * readers trim line values, so a space at a CONC boundary would be lost.
+ */
+function pushNote(out: string[], level: number, text: string): void {
+  const MAX = 200
+  const chunk = (s: string): string[] => {
+    const parts: string[] = []
+    while (s.length > MAX) {
+      let cut = MAX
+      while (cut > 1 && (s[cut - 1] === ' ' || s[cut] === ' ')) cut--
+      parts.push(s.slice(0, cut))
+      s = s.slice(cut)
+    }
+    parts.push(s)
+    return parts
+  }
+  const logical = text.replace(/\r\n?/g, '\n').split('\n')
+  logical.forEach((l, i) => {
+    const pieces = chunk(l)
+    out.push(line(i === 0 ? level : level + 1, i === 0 ? 'NOTE' : 'CONT', pieces[0] || undefined))
+    for (const p of pieces.slice(1)) out.push(line(level + 1, 'CONC', p))
+  })
 }
 
 function nameValue(p: Person): string {
@@ -351,7 +377,14 @@ export function exportGedcom(
       out.push(line(1, 'FACT', attr.value ? flatNote(attr.value) ?? undefined : undefined))
       out.push(line(2, 'TYPE', attr.key))
     }
-    if (p.notes) out.push(line(1, 'NOTE', p.notes.replace(/\n/g, ' ')))
+    // Person notes: the visible profile field, then any linked note records
+    // (GEDCOM-imported) whose text it doesn't already contain — without the
+    // dedup a round-trip would double every note the import merged in.
+    if (p.notes) pushNote(out, 1, p.notes)
+    for (const n of Notes.forOwner('person', p.id)) {
+      const t = n.text.trim()
+      if (t && !(p.notes ?? '').includes(t)) pushNote(out, 1, t)
+    }
     // Multimedia objects (FILE → media/<title>.<ext>, or the original URL).
     for (const d of docsByPerson.get(p.id) ?? []) {
       const m = mediaRefs.get(d.id)
@@ -437,6 +470,13 @@ export function exportGedcom(
       if (std && value) out.push(line(2, 'NOTE', value))
       if (note) out.push(line(2, 'NOTE', note))
       pushParticipants(ev.id, 2)
+    }
+    // Family-linked note records (GEDCOM-imported) — withheld for a union with
+    // an anonymized living spouse, like every other fact of that family.
+    if (!anonFam) {
+      for (const n of Notes.forOwner('family', f.id)) {
+        if (n.text.trim()) pushNote(out, 1, n.text.trim())
+      }
     }
   }
 

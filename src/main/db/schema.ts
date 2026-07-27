@@ -121,6 +121,9 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS person_documents (
   person_id       TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
   document_id     TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  -- Optional GEDCOM event tag (BIRT/CHR/DEAT/BURI…) tying the attachment to one
+  -- fact of the person; NULL = general attachment (existing DBs migrate to NULL).
+  event_tag       TEXT,
   PRIMARY KEY (person_id, document_id)
 );
 

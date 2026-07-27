@@ -35,8 +35,8 @@ function elbow(x1: number, y1: number, x2: number, y2: number): string {
   return `M ${x1} ${y1} H ${midX - r} Q ${midX} ${y1} ${midX} ${y1 + r * dir} V ${y2 - r * dir} Q ${midX} ${y2} ${midX + r} ${y2} H ${x2}`
 }
 
-/** Compact searchable person picker. */
-function PersonSelect({
+/** Compact searchable person picker (shared with the pedigree-collapse view). */
+export function PersonSelect({
   value,
   onChange,
   placeholder

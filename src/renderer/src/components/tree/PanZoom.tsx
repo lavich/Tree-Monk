@@ -214,7 +214,13 @@ export function PanZoom({
       <div
         className="h-full w-full"
         style={{
-          transform: `translate(${t.x}px, ${t.y}px) scale(${t.scale})`,
+          // At rest the offset snaps to whole pixels — a fractional translate
+          // leaves every glyph on a subpixel boundary (slightly blurry text).
+          // While panning/zooming the raw value keeps the motion smooth.
+          transform:
+            drag.current || wheeling
+              ? `translate(${t.x}px, ${t.y}px) scale(${t.scale})`
+              : `translate(${Math.round(t.x)}px, ${Math.round(t.y)}px) scale(${t.scale})`,
           transformOrigin: '0 0',
           // Promote to a compositor layer ONLY while actively panning/zooming:
           // the cached GPU texture keeps the interaction smooth, and dropping

@@ -1,6 +1,6 @@
-import { dialog, shell, BrowserWindow } from 'electron'
+import { app, dialog, shell, BrowserWindow } from 'electron'
 import { mediaAuthHeaders } from './familysearch'
-import { copyFileSync, readFileSync, writeFileSync, existsSync } from 'fs'
+import { copyFileSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'fs'
 import { basename, extname, join } from 'path'
 import { randomUUID } from 'crypto'
 import { mediaDir, resolveMediaPath } from './db/connection'
@@ -207,6 +207,32 @@ export async function downloadRemoteMedia(
   return prog
 }
 
+/**
+ * Microsoft Store (MSIX) builds virtualize AppData writes: this process sees
+ * `…\AppData\Roaming\treemonk\…`, but the file physically lives under the
+ * package's `…\AppData\Local\Packages\<family>\LocalCache\Roaming\…`. An
+ * external program (PDF reader, Office…) looks at the literal path OUTSIDE the
+ * container and reports "file not found" for a file that exists for us. Map the
+ * virtual path to its real on-disk location before handing it out.
+ */
+function externallyVisiblePath(filePath: string): string {
+  if (!process.windowsStore) return filePath
+  const roaming = app.getPath('appData')
+  const localAppData = process.env.LOCALAPPDATA
+  if (!localAppData || !filePath.toLowerCase().startsWith(roaming.toLowerCase())) return filePath
+  const rel = filePath.slice(roaming.length)
+  try {
+    const pkgRoot = join(localAppData, 'Packages')
+    for (const family of readdirSync(pkgRoot)) {
+      const real = join(pkgRoot, family, 'LocalCache', 'Roaming') + rel
+      if (existsSync(real)) return real
+    }
+  } catch {
+    /* Packages dir unreadable — keep the virtual path */
+  }
+  return filePath
+}
+
 /** Opens a stored document — an external URL in the browser, else the OS app. */
 export function openDocument(documentId: string): void {
   const doc = Documents.get(documentId)
@@ -216,7 +242,7 @@ export function openDocument(documentId: string): void {
     return
   }
   const filePath = resolveMediaPath(doc.filePath)
-  if (existsSync(filePath)) void shell.openPath(filePath)
+  if (existsSync(filePath)) void shell.openPath(externallyVisiblePath(filePath))
 }
 
 /** Records a web link as a source/document attached to a person. */

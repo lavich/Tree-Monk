@@ -619,7 +619,7 @@ export function PersonPanel(): JSX.Element | null {
             <div className="grid grid-cols-2 gap-3">
               <Field
                 label={`${t('person.birth')} · ${t('person.date')}`}
-                action={<FactSources citations={factCites} tags={['BIRT', 'CHR']} label={t('person.birth')} />}
+                action={<FactSources citations={factCites} tags={['BIRT', 'CHR']} label={t('person.birth')} personId={person.id} addTag="BIRT" onAdded={reload} />}
               >
                 <DateInput
                   value={person.birthDate ?? ''}
@@ -640,7 +640,7 @@ export function PersonPanel(): JSX.Element | null {
               </div>
               <Field
                 label={`${t('person.death')} · ${t('person.date')}`}
-                action={<FactSources citations={factCites} tags={['DEAT']} label={t('person.death')} />}
+                action={<FactSources citations={factCites} tags={['DEAT']} label={t('person.death')} personId={person.id} addTag="DEAT" onAdded={reload} />}
               >
                 <DateInput
                   value={person.deathDate ?? ''}
@@ -661,7 +661,7 @@ export function PersonPanel(): JSX.Element | null {
               </div>
               <Field
                 label={`${t('person.burial')} · ${t('person.date')}`}
-                action={<FactSources citations={factCites} tags={['BURI']} label={t('person.burial')} />}
+                action={<FactSources citations={factCites} tags={['BURI']} label={t('person.burial')} personId={person.id} addTag="BURI" onAdded={reload} />}
               >
                 <DateInput
                   value={person.burialDate ?? ''}
@@ -738,7 +738,7 @@ export function PersonPanel(): JSX.Element | null {
               </div>
               <Field
                 label={`${t('person.christening')} · ${t('person.date')}`}
-                action={<FactSources citations={factCites} tags={['CHR']} label={t('person.christening')} />}
+                action={<FactSources citations={factCites} tags={['CHR']} label={t('person.christening')} personId={person.id} addTag="CHR" onAdded={reload} />}
               >
                 <DateInput
                   value={person.christeningDate ?? ''}

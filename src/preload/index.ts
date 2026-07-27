@@ -39,8 +39,9 @@ const api: TreeMonkApi = {
     update: (id, input) => ipcRenderer.invoke(Channels.documents.update, id, input),
     remove: (id) => ipcRenderer.invoke(Channels.documents.remove, id),
     restore: (snap) => ipcRenderer.invoke(Channels.documents.restore, snap),
-    attach: (docId, pid) => ipcRenderer.invoke(Channels.documents.attach, docId, pid),
+    attach: (docId, pid, eventTag) => ipcRenderer.invoke(Channels.documents.attach, docId, pid, eventTag),
     detach: (docId, pid) => ipcRenderer.invoke(Channels.documents.detach, docId, pid),
+    tagsForPerson: (pid) => ipcRenderer.invoke(Channels.documents.tagsForPerson, pid),
     dataUrl: (id) => ipcRenderer.invoke(Channels.documents.dataUrl, id),
     open: (id) => ipcRenderer.invoke(Channels.documents.open, id)
   },
@@ -68,6 +69,7 @@ const api: TreeMonkApi = {
   },
   research: {
     citationsForPerson: (pid) => ipcRenderer.invoke(Channels.research.citationsForPerson, pid),
+    listSources: () => ipcRenderer.invoke(Channels.research.listSources),
     addCitation: (pid, edit) => ipcRenderer.invoke(Channels.research.addCitation, pid, edit),
     attachSourceToPerson: (sourceId, pid, eventTag) =>
       ipcRenderer.invoke(Channels.research.attachSourceToPerson, sourceId, pid, eventTag),

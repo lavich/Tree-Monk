@@ -90,6 +90,9 @@ function migrate(database: Database.Database): void {
   add('ALTER TABLE places ADD COLUMN place_type TEXT')
   add('ALTER TABLE places ADD COLUMN parent_name TEXT')
   add('ALTER TABLE places ADD COLUMN gov_id TEXT')
+  // Document↔fact link: an attachment may carry the GEDCOM event tag of the fact
+  // it evidences (BIRT/DEAT/…). Additive + nullable → existing rows stay general.
+  add('ALTER TABLE person_documents ADD COLUMN event_tag TEXT')
   // Child↔parents relationship type (GEDCOM PEDI): NULL = birth. Additive → safe.
   add('ALTER TABLE family_children ADD COLUMN relation TEXT')
   // Per-PARENT relation (apánál/anyánál külön). Additive + nullable → safe.

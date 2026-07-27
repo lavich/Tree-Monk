@@ -60,6 +60,7 @@ import type {
   Todo,
   TodoInput,
   SanityIssue,
+  Source,
   NameGroup,
   ReleaseEntry,
   UpdateInfo,
@@ -105,6 +106,7 @@ export const Channels = {
     restore: 'documents:restore',
     attach: 'documents:attach',
     detach: 'documents:detach',
+    tagsForPerson: 'documents:tagsForPerson',
     dataUrl: 'documents:dataUrl',
     open: 'documents:open'
   },
@@ -125,6 +127,7 @@ export const Channels = {
   },
   research: {
     citationsForPerson: 'research:citationsForPerson',
+    listSources: 'research:listSources',
     addCitation: 'research:addCitation',
     attachSourceToPerson: 'research:attachSourceToPerson',
     peopleForSource: 'research:peopleForSource',
@@ -396,8 +399,12 @@ export interface TreeMonkApi {
     /** Deletes a document (keeps the file), returning a snapshot for undo. */
     remove(id: string): Promise<DocumentSnapshot | null>
     restore(snapshot: DocumentSnapshot): Promise<void>
-    attach(documentId: string, personId: string): Promise<void>
+    /** Attach to a person; `eventTag` (BIRT/DEAT/…) ties it to one fact — passing
+     *  it also RE-tags an existing attachment. Omit to leave the tag untouched. */
+    attach(documentId: string, personId: string, eventTag?: string | null): Promise<void>
     detach(documentId: string, personId: string): Promise<void>
+    /** Per-attachment fact tags for one person (documentId + BIRT/DEAT/… or null). */
+    tagsForPerson(personId: string): Promise<{ documentId: string; eventTag: string | null }[]>
     /** Returns a data URL for in-app rendering of the stored file. */
     dataUrl(id: string): Promise<string | null>
     /** Opens the stored file in the OS default app (any type). */
@@ -420,6 +427,8 @@ export interface TreeMonkApi {
   }
   research: {
     citationsForPerson(personId: string): Promise<CitationDetail[]>
+    /** Every source in the tree — the "attach an existing source" picker. */
+    listSources(): Promise<Source[]>
     /** Add a source + citation to a person by hand. Returns the created citation. */
     addCitation(personId: string, edit: CitationEdit): Promise<Citation>
     /** Attach an EXISTING source to another person (a second citation, same source). */
