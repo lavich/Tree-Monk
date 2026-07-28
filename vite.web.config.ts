@@ -31,7 +31,7 @@ function aliasConnection(): Plugin {
 export default defineConfig({
   root: resolve(__dirname, 'src/web'),
   // Served from a sub-path on the VPS.
-  base: '/demo/',
+  base: '/webapp/',
   plugins: [aliasConnection(), react()],
   resolve: {
     alias: {
