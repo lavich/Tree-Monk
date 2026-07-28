@@ -1633,6 +1633,21 @@
     "readonlyToast": "The demo is read-only — the sample data can't be changed.",
     "hide": "Hide"
   },
+  "webLocal": {
+    "bannerLabel": "Local mode",
+    "bannerNote": "your data is stored only in this browser — nothing goes to any cloud",
+    "backup": "Download backup",
+    "hide": "Hide",
+    "introTitle": "TreeMonk in your browser",
+    "introSubtitle": "Local, private family tree — no cloud, no account",
+    "introBody": "This is the full TreeMonk running in your browser. Build your tree, import GEDCOM files, attach photos — everything runs locally.",
+    "introPrivacy": "All your data stays on your own machine, inside this browser's storage. Nothing is uploaded to any cloud or server; there is no sign-up and no account.",
+    "introBackup": "Browser storage can be cleared (e.g. \"clear browsing data\") — download a backup regularly with the backup button!",
+    "introDesktop": "For the full experience (FamilySearch, plugins, file-based autosave) get the free desktop app from treemonk.eu.",
+    "startEmpty": "Start with an empty tree",
+    "loadSample": "Load the sample family (to explore)",
+    "desktopOnlyToast": "This feature is only available in the desktop app."
+  },
   "topbar": {
     "import": "Import",
     "export": "Export"

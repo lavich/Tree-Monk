@@ -59,9 +59,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Build the read-only browser demo (treemonk.eu/demo) and attach it to the
-  # release as a tarball. The VPS pulls this asset (no credentials leave the VPS),
-  # so the live demo auto-updates with every release.
+  # Build the LOCAL web app (treemonk.eu/demo): the full TreeMonk running in the
+  # browser, with the database persisted in the visitor's OWN browser storage
+  # (OPFS/IndexedDB) — no cloud, no account, nothing leaves their machine. The
+  # tarball keeps the historical `treemonk-demo` asset name because the VPS pulls
+  # that exact asset (no credentials leave the VPS), so the live site
+  # auto-updates with every release.
   web-demo:
     needs: prepare
     runs-on: ubuntu-latest
@@ -76,16 +79,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Regenerate the demo DB from the CURRENT schema.ts every release, so it can
-      # never go stale against new columns/tables (which would make the app's
-      # queries throw and the live demo show no data).
-      - name: Regenerate demo database
+      # Regenerate the bundled sample DB from the CURRENT schema.ts every release
+      # (the web app offers it as the optional "load sample family" starter), so
+      # it can never go stale against new columns/tables.
+      - name: Regenerate sample database
         run: node scripts/build-demo-db.mjs
 
-      - name: Build read-only web demo
+      - name: Build local web app
         run: npx vite build --config vite.web.config.ts
 
-      - name: Package demo bundle
+      - name: Package web bundle
         run: tar -czf treemonk-demo.tar.gz -C out-web .
 
       - name: Attach to release

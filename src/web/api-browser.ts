@@ -8,6 +8,7 @@ import {
   Boards,
   Citations,
   Collaborations,
+  DismissedIssues,
   Documents,
   EventParticipants,
   Events,
@@ -16,6 +17,7 @@ import {
   Notes,
   Occupations,
   People,
+  PhotoRegions,
   Places,
   ResearchLogs,
   Sources,
@@ -30,10 +32,37 @@ import { buildAtlasPoints } from '../main/db/atlasData'
 import { runSanityCheck } from '../main/db/sanity'
 import { findRelationshipPath } from '../main/db/relationship'
 import { runPersonQuery, listSavedQueries } from '../main/db/query'
-import { scanDuplicates } from '../main/db/duplicates'
-import { givenNameVariants, surnameVariants } from '../main/db/nameNormalize'
+import { dismissMerge, mergePeople, scanDuplicates } from '../main/db/duplicates'
+import {
+  givenNameVariants,
+  normalizeGivenName,
+  normalizeSurname,
+  surnameVariants
+} from '../main/db/nameNormalize'
+import { removeSavedQuery, saveQuery } from '../main/db/query'
+import { removeEmptyPeople, removeNamelessStubs } from '../main/db/admin'
+import { importGedcomText } from '../main/gedcom/import'
+import { exportGedcom } from '../main/gedcom/export'
+import { exportIndexes, exportSite } from '../main/siteExport'
+import { importCsvText } from '../main/csvImport'
+import { takeLastWrittenFile } from './fs-shim'
+import { exportDbBytes, persistNow, replaceLocalDb } from './connection'
+import { wipeAllStorage } from './storage'
+import {
+  createLinkDocumentWeb,
+  documentDataUrlWeb,
+  downloadFile,
+  importDataUrlWeb,
+  openDocumentWeb,
+  pickAndImportFiles,
+  pickBinaryFile,
+  pickTextFile,
+  rebuildMediaRegistry,
+  setPersonAvatarWeb
+} from './media-web'
 
 const DEMO_VERSION = '0.19.3 · demo'
+const WEB_VERSION = '1.8.16 · web'
 
 // The UI registers a handler so a blocked write surfaces a friendly toast.
 let onBlocked: () => void = () => {}
@@ -416,6 +445,327 @@ export function createDemoApi(): TreeMonkApi {
     fsAnnounce: {
       status: async () => true,
       markSeen: async () => {}
+    }
+  }
+}
+
+const LOCAL_WORKSPACE = {
+  id: 'local',
+  name: 'TreeMonk Web',
+  file: 'treemonk.sqlite',
+  color: '#0f766e',
+  createdAt: '2024-01-01T00:00:00.000Z'
+}
+
+const stamp = (): string => new Date().toISOString().slice(0, 10).replace(/-/g, '')
+
+/**
+ * The WRITABLE browser implementation of `window.api` for the local web app
+ * (treemonk.eu/demo → helyi, böngészőben tárolt fa). Built on the demo API:
+ * every read stays as-is; mutations run the real repository layer on the
+ * persistent WASM SQLite (see connection.ts — saved to OPFS/IndexedDB after
+ * every change). Desktop-only integrations (FamilySearch, plugins, tree-image
+ * and PDF export) remain friendly no-ops via the `blocked` toast.
+ */
+export function createLocalApi(): TreeMonkApi {
+  const base = createDemoApi()
+  return {
+    ...base,
+    people: {
+      ...base.people,
+      create: async (input) => People.create(input),
+      update: async (id, input) => People.update(id, input),
+      remove: async (id) => People.remove(id),
+      restore: async (snap) => People.restore(snap),
+      setAvatar: async (id) => setPersonAvatarWeb(id)
+    },
+    families: {
+      ...base.families,
+      create: async (input) => Families.create(input),
+      update: async (id, input) => Families.update(id, input),
+      remove: async (id) => Families.remove(id),
+      setChildRelation: async (fid, cid, side, rel) => Families.setChildRelation(fid, cid, side, rel)
+    },
+    eventParticipants: {
+      ...base.eventParticipants,
+      set: async (eid, pid, role) => EventParticipants.set(eid, pid, role),
+      remove: async (eid, pid) => EventParticipants.remove(eid, pid)
+    },
+    witnesses: {
+      ...base.witnesses,
+      add: async (ot, oid, wid) => Witnesses.add(ot, oid, wid),
+      remove: async (ot, oid, wid) => Witnesses.remove(ot, oid, wid)
+    },
+    attributes: {
+      ...base.attributes,
+      create: async (pid, input) => Attributes.create(pid, input),
+      update: async (id, input) => Attributes.update(id, input),
+      remove: async (id) => Attributes.remove(id)
+    },
+    documents: {
+      ...base.documents,
+      import: async (personId) => pickAndImportFiles(personId),
+      importPaths: async () => [], // OS paths do not exist in the browser
+      importDataUrl: async (dataUrl, personId) => importDataUrlWeb(dataUrl, personId),
+      createLink: async (url, title, personId) => createLinkDocumentWeb(url, title, personId),
+      update: async (id, input) => Documents.update(id, input),
+      remove: async (id) => Documents.remove(id),
+      restore: async (snap) => Documents.restore(snap),
+      attach: async (docId, pid, eventTag) => Documents.attach(docId, pid, eventTag),
+      detach: async (docId, pid) => Documents.detach(docId, pid),
+      dataUrl: async (id) => documentDataUrlWeb(id),
+      open: async (id) => openDocumentWeb(id)
+    },
+    regions: {
+      forDocument: async (docId) => PhotoRegions.forDocument(docId),
+      forPerson: async (pid) => PhotoRegions.forPerson(pid),
+      create: async (input) => PhotoRegions.create(input),
+      update: async (id, patch) => PhotoRegions.update(id, patch),
+      remove: async (id) => PhotoRegions.remove(id)
+    },
+    board: {
+      ...base.board,
+      saveNode: async (node) => Board.saveNode(node),
+      saveNodes: async (nodes) => Board.saveNodes(nodes),
+      removeNode: async (id) => Board.removeNode(id),
+      saveEdge: async (edge) => Board.saveEdge(edge),
+      removeEdge: async (id) => Board.removeEdge(id)
+    },
+    boards: {
+      ...base.boards,
+      create: async (name) => Boards.create(name),
+      rename: async (id, name) => Boards.rename(id, name),
+      remove: async (id) => Boards.remove(id),
+      duplicate: async (id, name) => Boards.duplicate(id, name)
+    },
+    research: {
+      ...base.research,
+      addCitation: async (personId, edit) => {
+        const s = Sources.upsert({
+          gedcomId: null,
+          title: edit.sourceTitle ?? '',
+          author: edit.sourceAuthor ?? null,
+          publication: edit.sourcePublication ?? null,
+          repositoryId: null,
+          text: edit.sourceText ?? null,
+          recordDate: edit.recordDate ?? null
+        })
+        return Citations.create({
+          sourceId: s.id,
+          ownerType: 'person',
+          ownerId: personId,
+          eventTag: edit.eventTag ?? null,
+          page: edit.page ?? null,
+          quality: edit.quality ?? null,
+          note: edit.note ?? null
+        })
+      },
+      attachSourceToPerson: async (sourceId, personId, eventTag) =>
+        Citations.attachSource(sourceId, personId, eventTag),
+      detachSourceFromPerson: async (sourceId, personId) => Citations.detachSource(sourceId, personId),
+      updateCitation: async (id, edit) => {
+        const hasSrc =
+          edit.sourceTitle !== undefined ||
+          edit.sourceAuthor !== undefined ||
+          edit.sourcePublication !== undefined ||
+          edit.sourceText !== undefined ||
+          edit.recordDate !== undefined
+        let sid = Citations.sourceIdOf(id)
+        if (hasSrc && sid) {
+          Sources.update(sid, {
+            title: edit.sourceTitle,
+            author: edit.sourceAuthor,
+            publication: edit.sourcePublication,
+            text: edit.sourceText,
+            recordDate: edit.recordDate
+          })
+        } else if (hasSrc && !sid) {
+          sid = Sources.upsert({
+            gedcomId: null,
+            title: edit.sourceTitle ?? '',
+            author: edit.sourceAuthor ?? null,
+            publication: edit.sourcePublication ?? null,
+            repositoryId: null,
+            text: edit.sourceText ?? null,
+            recordDate: edit.recordDate ?? null
+          }).id
+        }
+        Citations.update(id, {
+          sourceId: sid ?? undefined,
+          eventTag: edit.eventTag,
+          page: edit.page,
+          quality: edit.quality,
+          note: edit.note
+        })
+      },
+      deleteCitation: async (id) => Citations.remove(id),
+      createLog: async (input) => ResearchLogs.create(input),
+      updateLog: async (id, input) => ResearchLogs.update(id, input),
+      removeLog: async (id) => ResearchLogs.remove(id)
+    },
+    aliases: {
+      ...base.aliases,
+      create: async (pid, input) => Aliases.create(pid, input),
+      remove: async (id) => Aliases.remove(id)
+    },
+    occupations: {
+      ...base.occupations,
+      create: async (pid, input) => Occupations.create(pid, input),
+      update: async (id, input) => Occupations.update(id, input),
+      remove: async (id) => Occupations.remove(id),
+      reorder: async (ids) => Occupations.reorder(ids)
+    },
+    godparents: {
+      ...base.godparents,
+      add: async (pid, gid) => Godparents.add(pid, gid),
+      remove: async (pid, gid) => Godparents.remove(pid, gid)
+    },
+    todos: {
+      ...base.todos,
+      create: async (input) => Todos.create(input),
+      update: async (id, input) => Todos.update(id, input),
+      remove: async (id) => Todos.remove(id)
+    },
+    events: {
+      ...base.events,
+      create: async (pid, input) => Events.create('person', pid, input),
+      createForFamily: async (fid, input) => Events.create('family', fid, input),
+      update: async (id, input) => Events.update(id, input),
+      remove: async (id) => Events.remove(id),
+      reorder: async (ids) => Events.reorder(ids)
+    },
+    sanity: {
+      ...base.sanity,
+      dismiss: async (key) => DismissedIssues.add(key)
+    },
+    query: {
+      ...base.query,
+      save: async (name, query) => saveQuery(name, query),
+      remove: async (id) => removeSavedQuery(id)
+    },
+    backup: {
+      create: async () => {
+        const name = `treemonk-backup-${stamp()}.sqlite`
+        downloadFile(name, exportDbBytes(), 'application/x-sqlite3')
+        return { path: name }
+      },
+      restore: async () => {
+        const bytes = await pickBinaryFile('.sqlite,.db,.sqlite3')
+        if (!bytes) return false
+        await replaceLocalDb(bytes)
+        location.reload()
+        return true
+      }
+    },
+    gedcom: {
+      import: async () => {
+        const text = await pickTextFile('.ged,.gedcom')
+        if (text === null) return null
+        const res = importGedcomText(text)
+        await persistNow()
+        await rebuildMediaRegistry()
+        return res
+      },
+      importContent: async (text) => {
+        const res = importGedcomText(text)
+        await persistNow()
+        await rebuildMediaRegistry()
+        return res
+      },
+      export: async (personIds, defaultName, opts) => {
+        const base_ = (defaultName ?? '').replace(/[\\/]+/g, '').replace(/\.ged$/i, '').trim() || 'treemonk-export'
+        const text = exportGedcom(`${base_}.ged`, personIds, opts)
+        takeLastWrittenFile()
+        downloadFile(`${base_}.ged`, text, 'text/plain;charset=utf-8')
+        return { path: `${base_}.ged` }
+      }
+    },
+    csv: {
+      import: async () => {
+        const text = await pickTextFile('.csv,.txt,.tsv')
+        if (text === null) return null
+        const res = importCsvText(text)
+        await persistNow()
+        return res
+      }
+    },
+    site: {
+      export: async (lang) => {
+        exportSite('treemonk-site.html', lang)
+        const w = takeLastWrittenFile()
+        if (!w) return null
+        downloadFile('treemonk-site.html', w.data, 'text/html;charset=utf-8')
+        return { path: 'treemonk-site.html' }
+      },
+      exportIndexes: async (lang) => {
+        exportIndexes('treemonk-indexes.html', lang)
+        const w = takeLastWrittenFile()
+        if (!w) return null
+        downloadFile('treemonk-indexes.html', w.data, 'text/html;charset=utf-8')
+        return { path: 'treemonk-indexes.html' }
+      }
+    },
+    data: {
+      ...base.data,
+      exportDatabase: async () => {
+        const name = `treemonk-${stamp()}.sqlite`
+        downloadFile(name, exportDbBytes(), 'application/x-sqlite3')
+        return { path: name }
+      }
+    },
+    db: {
+      wipe: async () => {
+        await wipeAllStorage()
+        location.reload()
+      },
+      cleanup: async () => {
+        const removed = removeNamelessStubs()
+        AppSettings.set('fs_import_pending', null)
+        await persistNow()
+        return removed
+      },
+      removeEmpty: async () => {
+        const removed = removeEmptyPeople()
+        AppSettings.set('fs_import_pending', null)
+        await persistNow()
+        return removed
+      }
+    },
+    settings: {
+      ...base.settings,
+      setDefaultRoot: async (id) => AppSettings.set('default_root_person_id', id)
+    },
+    app: {
+      ...base.app,
+      setLanguage: async (lang) => AppSettings.set('app_language', lang)
+    },
+    duplicates: {
+      ...base.duplicates,
+      merge: async (survivorId, victimId, resolution) => mergePeople(survivorId, victimId, resolution),
+      dismiss: async (aId, bId) => dismissMerge(aId, bId)
+    },
+    names: {
+      ...base.names,
+      normalizeSurname: async (variants, canonical) => normalizeSurname(variants, canonical),
+      normalizeGivenName: async (variants, canonical) => normalizeGivenName(variants, canonical)
+    },
+    updates: {
+      ...base.updates,
+      version: async () => WEB_VERSION,
+      check: async () => ({
+        current: WEB_VERSION,
+        latest: null,
+        hasUpdate: false,
+        notes: null,
+        url: null,
+        publishedAt: null,
+        assetUrl: null
+      })
+    },
+    workspaces: {
+      ...base.workspaces,
+      list: async () => [LOCAL_WORKSPACE],
+      active: async () => LOCAL_WORKSPACE
     }
   }
 }

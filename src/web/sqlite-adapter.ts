@@ -73,21 +73,40 @@ class WasmStatement {
 
 /**
  * Wraps a sql.js (WASM SQLite) database so the app's repository layer — written
- * against better-sqlite3's synchronous API — runs unchanged in the browser. Used
- * by the read-only web demo; the underlying database is an in-memory copy of a
- * bundled sample, so nothing is persisted.
+ * against better-sqlite3's synchronous API — runs unchanged in the browser.
+ * The local web build passes an `onMutate` hook that schedules persisting the
+ * database bytes (OPFS/IndexedDB); the read-only demo passes none.
  */
 export class WasmDatabase {
-  constructor(private readonly db: SqlJsDatabase) {}
+  constructor(
+    private readonly db: SqlJsDatabase,
+    private readonly onMutate?: () => void
+  ) {}
 
   prepare(sql: string): WasmStatement {
-    return new WasmStatement(this.db, sql)
+    const stmt = new WasmStatement(this.db, sql)
+    if (this.onMutate && /^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(sql)) {
+      const notify = this.onMutate
+      const run = stmt.run.bind(stmt)
+      stmt.run = (...args: unknown[]): RunResult => {
+        const r = run(...args)
+        notify()
+        return r
+      }
+    }
+    return stmt
   }
 
   /** Run one or more statements, ignoring any rows (schema / pragmas). */
   exec(sql: string): this {
     this.db.run(sql)
+    if (this.onMutate && !/^\s*(SELECT|BEGIN|COMMIT|ROLLBACK|PRAGMA)\b/i.test(sql)) this.onMutate()
     return this
+  }
+
+  /** Raw SQLite bytes of the current database — the persistence payload. */
+  export(): Uint8Array {
+    return this.db.export()
   }
 
   /** No-op: WAL / foreign-key pragmas are irrelevant for an in-memory copy. */

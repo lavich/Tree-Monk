@@ -1630,6 +1630,21 @@
     "readonlyToast": "Die Demo ist schreibgeschützt — die Beispieldaten können nicht geändert werden.",
     "hide": "Ausblenden"
   },
+  "webLocal": {
+    "bannerLabel": "Lokaler Modus",
+    "bannerNote": "deine Daten bleiben nur in diesem Browser — nichts geht in eine Cloud",
+    "backup": "Backup herunterladen",
+    "hide": "Ausblenden",
+    "introTitle": "TreeMonk in deinem Browser",
+    "introSubtitle": "Lokaler, privater Stammbaum — ohne Cloud, ohne Konto",
+    "introBody": "Das ist das vollständige TreeMonk direkt im Browser. Baue deinen Stammbaum, importiere GEDCOM-Dateien, füge Fotos hinzu — alles läuft lokal.",
+    "introPrivacy": "Alle Daten bleiben auf deinem eigenen Rechner, im Speicher dieses Browsers. Nichts wird in eine Cloud oder an einen Server übertragen; keine Registrierung, kein Konto.",
+    "introBackup": "Der Browser-Speicher kann gelöscht werden (z. B. „Browserdaten löschen“) — lade regelmäßig ein Backup über den Backup-Button herunter!",
+    "introDesktop": "Für den vollen Funktionsumfang (FamilySearch, Erweiterungen, dateibasierte Speicherung) hole dir die kostenlose Desktop-App auf treemonk.eu.",
+    "startEmpty": "Mit leerem Stammbaum starten",
+    "loadSample": "Beispielfamilie laden (zum Ausprobieren)",
+    "desktopOnlyToast": "Diese Funktion ist nur in der Desktop-App verfügbar."
+  },
   "topbar": {
     "import": "Importieren",
     "export": "Exportieren"

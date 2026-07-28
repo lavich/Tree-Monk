@@ -1630,6 +1630,21 @@
     "readonlyToast": "A demó csak olvasható — a mintaadat nem módosítható.",
     "hide": "Elrejtés"
   },
+  "webLocal": {
+    "bannerLabel": "Helyi mód",
+    "bannerNote": "az adataid csak ebben a böngészőben tárolódnak — nem kerülnek felhőbe",
+    "backup": "Mentés letöltése",
+    "hide": "Elrejtés",
+    "introTitle": "TreeMonk a böngésződben",
+    "introSubtitle": "Helyi, privát családfa — felhő és fiók nélkül",
+    "introBody": "Ez a TreeMonk teljes értékű, böngészőben futó változata. Építsd a családfád, importálj GEDCOM-ot, csatolj képeket — minden funkció helyben fut.",
+    "introPrivacy": "Minden adatod kizárólag a saját gépeden, ennek a böngészőnek a tárolójában marad. Semmi nem kerül felhőbe vagy szerverre, nincs regisztráció és nincs fiók.",
+    "introBackup": "A böngésző tárolója törölhető (pl. „böngészési adatok törlése”) — készíts rendszeresen biztonsági mentést a letöltés gombbal!",
+    "introDesktop": "A teljes élményhez (FamilySearch, bővítmények, automatikus mentés fájlba) töltsd le az ingyenes asztali alkalmazást a treemonk.eu oldalról.",
+    "startEmpty": "Kezdés üres családfával",
+    "loadSample": "Mintacsalád betöltése (kipróbáláshoz)",
+    "desktopOnlyToast": "Ez a funkció csak az asztali alkalmazásban érhető el."
+  },
   "topbar": {
     "import": "Importálás",
     "export": "Exportálás"
