@@ -91,3 +91,10 @@ kod.py
 # Local API test token (never commit)
 .api-token-local
 start-with-api.ps1
+
+# Local plugin test builds (never commit)
+plugin-build/
+# Local agent/session state
+.claude/
+# Microsoft Store submission assets (kept out of the source release)
+store-assets/

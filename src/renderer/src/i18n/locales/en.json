@@ -61,6 +61,11 @@
     "privacyNote": "Only your rating, your note and the app version are sent — never any family-tree data.",
     "later": "Not now"
   },
+  "about": {
+    "title": "About",
+    "copyright": "© 2026 TreeMonk · All rights reserved",
+    "fsCredit": "TreeMonk works with FamilySearch:"
+  },
   "feedback": {
     "section": "Feedback",
     "title": "Write to the developer",
@@ -368,7 +373,7 @@
     "deleteConfirm": "Delete the whole conversation? This removes it from the server and your device — it can't be undone."
   },
   "nav": {
-    "collapse": "Collapse menu",
+    "collapse": "Pedigree collapse",
     "expand": "Expand menu",
     "menu": "Menu",
     "help": "Help",
@@ -381,7 +386,6 @@
     "issues": "Data Issues",
     "query": "Query",
     "kinship": "Kinship",
-    "collapse": "Pedigree collapse",
     "famous": "Famous relatives",
     "audit": "History",
     "calendar": "Calendar",
@@ -887,7 +891,9 @@
     "indexExportBtn": "Indexes (HTML)",
     "sectionImportExport": "Import / Export",
     "sectionApi": "Local API",
-    "sectionHelp": "Help & feedback"
+    "sectionHelp": "Help & feedback",
+    "fsSignedInDesc": "Signed in — sync, search and place lookup use FamilySearch.",
+    "fsSignedOutDesc": "Not signed in. Sign in to sync and import."
   },
   "common": {
     "done": "Done",
@@ -922,7 +928,8 @@
     "renameTitle": "Rename tree",
     "namePlaceholder": "e.g. John Doe's family tree",
     "deleteTitle": "Delete \"{{name}}\"?",
-    "deleteConsequence": "This removes the tree from the list. The data file is kept on disk and can be re-added later."
+    "deleteConsequence": "This removes the tree from the list. The data file is kept on disk and can be re-added later.",
+    "kindManual": "Manual · GEDCOM"
   },
   "delete": {
     "docTitle": "Delete \"{{name}}\"",
@@ -1511,7 +1518,12 @@
     "desc": "Sign in and sync with the official FamilySearch API.",
     "openBtn": "Open",
     "noClientId": "The FamilySearch developer key (AppKey) isn't configured in this build yet.",
-    "signInHelp": "Sign-in happens on FamilySearch's own page, in your system browser. TreeMonk never sees your password.",
+    "signInHelp": "Sign-in happens on the FamilySearch website, in your system browser. TreeMonk never sees your password.",
+    "brand": {
+      "worksWith": "works with FamilySearch",
+      "tierAlt": "FamilySearch Solutions Program logo",
+      "galleryLink": "View our listing in the FamilySearch Solutions Gallery"
+    },
     "signInBtn": "Sign in with FamilySearch",
     "signedIn": "Signed in",
     "loginFailed": "Sign-in failed. Please try again.",
@@ -1617,7 +1629,11 @@
     "maxPersons": "Max. number of persons",
     "depthWarning": "This could be a lot of people! The import stops at {{max}} — direct ancestors and their families take priority.",
     "priorityNote": "Priority: direct ancestors → their children → descendants.",
-    "dataResaleNotice": "Selling, leasing, or sublicensing to third parties any data obtained from FamilySearch through this software is prohibited."
+    "dataResaleNotice": "Selling, leasing, or sublicensing to third parties any data obtained from FamilySearch through this software is prohibited.",
+    "signInNow": "Sign in to FamilySearch",
+    "signingIn": "Signing in…",
+    "loginOk": "Signed in to FamilySearch.",
+    "signedOutToast": "Signed out of FamilySearch."
   },
   "demo": {
     "introTitle": "Welcome to the TreeMonk demo!",
@@ -2085,10 +2101,11 @@
     "fsComingDesc": "FamilySearch integration is coming soon. For now, start with Manual / GEDCOM mode."
   },
   "reimport": {
-    "title": "Important: FamilySearch updates",
-    "warning": "If your database was made with an earlier TreeMonk version, FamilySearch features require re-importing your tree (the old import lacks some data). In Manual/GEDCOM mode everything keeps working unchanged.",
-    "fsDesc": "Sign in now — then re-import your tree so everything (photos, notes, sources, sync) works.",
-    "manualDesc": "Everything stays as it is. FamilySearch features can be enabled later in Settings."
+    "title": "FamilySearch – a new family tree is needed",
+    "intro": "The FamilySearch integration has arrived! FamilySearch mode and manual/GEDCOM mode live in separate family trees, so an existing family tree cannot be switched over.",
+    "howTo": "To use FamilySearch, create a new family tree with the “Tree” switcher in the top-left corner (New tree…), then choose FamilySearch on the start screen.",
+    "keepSafe": "Your current family tree stays untouched — you can switch back to it at any time with the same switcher.",
+    "ok": "Got it"
   },
   "fsScan": {
     "button": "Changes",
@@ -2114,6 +2131,8 @@
   },
   "fsImport": {
     "growing": "Growing your tree…",
+    "enriching": "Downloading photos, notes and sources…",
+    "stop": "Stop",
     "done": "{{people}} people · {{families}} families imported",
     "hint": "The import runs in the background — watch your tree grow meanwhile.",
     "open": "Open",

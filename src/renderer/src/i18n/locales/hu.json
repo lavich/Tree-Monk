@@ -61,6 +61,11 @@
     "privacyNote": "Csak az értékelés, az üzeneted és az app verziója kerül elküldésre — semmilyen családfa-adat.",
     "later": "Most nem"
   },
+  "about": {
+    "title": "Névjegy",
+    "copyright": "© 2026 TreeMonk · Minden jog fenntartva",
+    "fsCredit": "A TreeMonk együttműködik a FamilySearch szolgáltatással:"
+  },
   "feedback": {
     "section": "Visszajelzés",
     "title": "Írj a fejlesztőnek",
@@ -368,7 +373,7 @@
     "deleteConfirm": "Biztosan törlöd a teljes beszélgetést? Ez a szerverről és a gépedről is törli — nem vonható vissza."
   },
   "nav": {
-    "collapse": "Menü összecsukása",
+    "collapse": "Ősvesztés",
     "expand": "Menü kinyitása",
     "menu": "Menü",
     "help": "Súgó",
@@ -381,7 +386,6 @@
     "issues": "Adathibák",
     "query": "Lekérdezés",
     "kinship": "Rokonság",
-    "collapse": "Ősvesztés",
     "famous": "Híres rokonok",
     "audit": "Napló",
     "calendar": "Naptár",
@@ -887,7 +891,9 @@
     "indexExportBtn": "Mutatók (HTML)",
     "sectionImportExport": "Import / Export",
     "sectionApi": "Helyi API",
-    "sectionHelp": "Súgó és visszajelzés"
+    "sectionHelp": "Súgó és visszajelzés",
+    "fsSignedInDesc": "Belépve — a szinkron, a keresés és a helykeresés a FamilySearch-öt használja.",
+    "fsSignedOutDesc": "Nincs belépve. A szinkronhoz és az importhoz lépj be."
   },
   "common": {
     "done": "Kész",
@@ -922,7 +928,8 @@
     "renameTitle": "Családfa átnevezése",
     "namePlaceholder": "pl. Gipsz Jakab családfája",
     "deleteTitle": "Törlöd: „{{name}}”?",
-    "deleteConsequence": "Ez eltávolítja a családfát a listából. Az adatfájl a lemezen marad, és később újra hozzáadható."
+    "deleteConsequence": "Ez eltávolítja a családfát a listából. Az adatfájl a lemezen marad, és később újra hozzáadható.",
+    "kindManual": "Kézi · GEDCOM"
   },
   "delete": {
     "docTitle": "{{name}} törlése",
@@ -1508,7 +1515,12 @@
     "desc": "Belépés és szinkron a hivatalos FamilySearch API-val.",
     "openBtn": "Megnyitás",
     "noClientId": "A FamilySearch fejlesztői kulcs (AppKey) még nincs beállítva ebben a buildben.",
-    "signInHelp": "A belépés a FamilySearch saját oldalán történik, a rendszer böngésződben. A TreeMonk sosem látja a jelszavad.",
+    "signInHelp": "A belépés a FamilySearch weboldalán történik, a rendszer böngésződben. A TreeMonk sosem látja a jelszavad.",
+    "brand": {
+      "worksWith": "együttműködik a FamilySearch szolgáltatással",
+      "tierAlt": "FamilySearch Solutions Program logó",
+      "galleryLink": "Megtekintés a FamilySearch Solutions Gallery-ben"
+    },
     "signInBtn": "Belépés FamilySearch-be",
     "signedIn": "Sikeres belépés",
     "loginFailed": "A belépés nem sikerült. Próbáld újra.",
@@ -1614,7 +1626,11 @@
     "maxPersons": "Max. személyek száma",
     "depthWarning": "Ez sok személyt jelenthet! Az import a megadott {{max}} főnél megáll — a közvetlen felmenők és családjuk élveznek elsőbbséget.",
     "priorityNote": "Prioritás: közvetlen felmenők → az ő gyerekeik → leszármazottak.",
-    "dataResaleNotice": "A FamilySearchből a szoftveren keresztül kinyert adatok harmadik fél részére történő értékesítése, bérbeadása és továbblicencelése tilos."
+    "dataResaleNotice": "A FamilySearchből a szoftveren keresztül kinyert adatok harmadik fél részére történő értékesítése, bérbeadása és továbblicencelése tilos.",
+    "signInNow": "Belépés a FamilySearch-be",
+    "signingIn": "Belépés folyamatban…",
+    "loginOk": "Beléptél a FamilySearch-be.",
+    "signedOutToast": "Kijelentkeztél a FamilySearch-ből."
   },
   "demo": {
     "introTitle": "Üdv a TreeMonk demóban!",
@@ -2082,10 +2098,11 @@
     "fsComingDesc": "A FamilySearch-integráció hamarosan érkezik. Egyelőre a Kézi / GEDCOM móddal indulj."
   },
   "reimport": {
-    "title": "Fontos: FamilySearch-újdonságok",
-    "warning": "Ha az adatbázisod egy korábbi TreeMonk-verzióval készült, a FamilySearch-funkciókhoz újra kell importálnod a fádat (a régi import nem tartalmaz minden adatot). Kézi/GEDCOM módban minden változatlanul működik.",
-    "fsDesc": "Belépés most — utána importáld újra a fád, hogy minden (fotók, jegyzetek, források, szinkron) működjön.",
-    "manualDesc": "Minden marad, ahogy volt. A FamilySearch-funkciók később is bekapcsolhatók a Beállításokban."
+    "title": "FamilySearch – új családfa szükséges",
+    "intro": "Megérkezett a FamilySearch-integráció! A FamilySearch-mód és a kézi/GEDCOM mód külön családfákban él, ezért egy meglévő családfa nem kapcsolható át FamilySearch-re.",
+    "howTo": "A FamilySearch használatához hozz létre egy új családfát a bal felső sarokban lévő „Családfa” váltóval (Új családfa…), majd az induló képernyőn válaszd a FamilySearch lehetőséget.",
+    "keepSafe": "A mostani családfád érintetlen marad — ugyanezzel a váltóval bármikor visszaválthatsz rá.",
+    "ok": "Értem"
   },
   "fsScan": {
     "button": "Változások",
@@ -2111,6 +2128,8 @@
   },
   "fsImport": {
     "growing": "Épül a fád…",
+    "enriching": "Fotók, jegyzetek és források letöltése…",
+    "stop": "Leállítás",
     "done": "{{people}} személy · {{families}} család importálva",
     "hint": "Az importálás a háttérben fut — közben nézheted, ahogy nő a fa.",
     "open": "Megnyitás",

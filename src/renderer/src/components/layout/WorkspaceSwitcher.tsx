@@ -84,6 +84,18 @@ export function WorkspaceSwitcher(): JSX.Element | null {
                 style={{ backgroundColor: w.color }}
               />
               <span className="min-w-0 flex-1 truncate">{w.name}</span>
+              {w.kind && (
+                <span
+                  className={
+                    'shrink-0 rounded-full border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ' +
+                    (w.kind === 'fs'
+                      ? 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                      : 'border-border text-muted-foreground')
+                  }
+                >
+                  {w.kind === 'fs' ? 'FamilySearch' : t('workspace.kindManual')}
+                </span>
+              )}
               {w.id === active.id && <Check className="h-4 w-4 shrink-0 text-primary" />}
             </DropdownMenuItem>
           ))}

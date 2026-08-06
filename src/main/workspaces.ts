@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { basename, join } from 'path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
+import Database from 'better-sqlite3'
 import type { Workspace } from '@shared/types'
 
 /**
@@ -48,6 +49,23 @@ function registryPath(): string {
 }
 
 let cache: Registry | null = null
+// True when THIS run created the registry from nothing (fresh install, or the
+// user wiped/moved the data folder). The renderer resets its first-launch
+// choices then — otherwise a stale localStorage flag suppressed the start
+// chooser on a brand-new profile.
+let bootstrappedFresh = false
+
+export function wasFreshBootstrap(): boolean {
+  return bootstrappedFresh
+}
+
+/** Default name for the very first tree, in the OS language. */
+function defaultTreeName(): string {
+  const loc = (app.getLocale() || 'en').toLowerCase()
+  if (loc.startsWith('hu')) return 'Családfa'
+  if (loc.startsWith('de')) return 'Stammbaum'
+  return 'Family Tree'
+}
 
 function persist(): void {
   if (cache) writeFileSync(registryPath(), JSON.stringify(cache, null, 2), 'utf-8')
@@ -68,12 +86,13 @@ function load(): Registry {
     // workspace, so existing users keep all their data seamlessly.
     const first: Workspace = {
       id: randomUUID(),
-      name: 'Családfa',
+      name: defaultTreeName(),
       file: join(rootDir(), 'treemonk.db'),
       color: COLORS[0],
       createdAt: new Date().toISOString()
     }
     cache = { active: first.id, workspaces: [first] }
+    bootstrappedFresh = true
     persist()
   }
   if (!cache.workspaces.find((w) => w.id === cache!.active)) {
@@ -108,8 +127,53 @@ function healPaths(r: Registry): void {
   if (healed) persist()
 }
 
+/** Detect what a tree is by looking INTO its database: any person carrying a
+ *  FamilySearch id makes it an FS tree. Opened read-only on its own connection
+ *  (this may be a non-active workspace's file). */
+function detectKind(file: string): 'fs' | 'manual' | undefined {
+  if (!file || !existsSync(file)) return undefined
+  try {
+    const db = new Database(file, { readonly: true, fileMustExist: true })
+    try {
+      const row = db.prepare("SELECT 1 AS x FROM people WHERE coalesce(fs_id,'') != '' LIMIT 1").get()
+      return row ? 'fs' : 'manual'
+    } finally {
+      db.close()
+    }
+  } catch {
+    return undefined
+  }
+}
+
 export function listWorkspaces(): Workspace[] {
-  return load().workspaces
+  const r = load()
+  // Backfill the kind for entries that don't have one yet (older registries) —
+  // probed once, then persisted, so the list stays cheap.
+  let changed = false
+  for (const w of r.workspaces) {
+    if (w.kind) continue
+    const k = detectKind(w.file)
+    if (k) {
+      w.kind = k
+      changed = true
+    }
+  }
+  if (changed) persist()
+  return r.workspaces
+}
+
+/** Mark the ACTIVE workspace's kind (called by the importers: an FS import
+ *  makes the tree an FS tree; a GEDCOM import marks a so-far-unknown tree
+ *  manual — it never downgrades an FS tree). */
+export function markActiveWorkspaceKind(kind: 'fs' | 'manual'): void {
+  const r = load()
+  const w = r.workspaces.find((x) => x.id === r.active)
+  if (!w) return
+  if (kind === 'manual' && w.kind === 'fs') return
+  if (w.kind !== kind) {
+    w.kind = kind
+    persist()
+  }
 }
 
 export function activeWorkspace(): Workspace {

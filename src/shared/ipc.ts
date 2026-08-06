@@ -316,7 +316,8 @@ export const Channels = {
     create: 'workspaces:create',
     switch: 'workspaces:switch',
     rename: 'workspaces:rename',
-    remove: 'workspaces:remove'
+    remove: 'workspaces:remove',
+    freshBootstrap: 'workspaces:freshBootstrap'
   },
   audit: {
     query: 'audit:query',
@@ -723,6 +724,9 @@ export interface TreeMonkApi {
     list(): Promise<Workspace[]>
     /** The currently active workspace. */
     active(): Promise<Workspace>
+    /** True when THIS app run created the profile from scratch (no registry
+     *  existed) — the renderer then resets the first-launch choices. */
+    freshBootstrap(): Promise<boolean>
     /** Creates a new tree, switches to it and relaunches the app. */
     create(name: string): Promise<void>
     /** Switches the active tree and relaunches the app. */

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { TreeDeciduous, LogIn, Download, Loader2, CheckCircle2, Info, AlertTriangle } from 'lucide-react'
+import { LogIn, Download, Loader2, CheckCircle2, Info, AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { FsSolutionBadge, FsTrademarkNotice, FsWorksWithHeader } from '@/components/common/FsBrand'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/useAppStore'
 import { setFsMode } from '@/lib/fsMode'
@@ -127,9 +128,11 @@ export function FamilySearchDialog({
         onInteractOutside={(e) => mandatory && !bailed.current && e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 pr-8">
-            <TreeDeciduous className="h-5 w-5 shrink-0 text-emerald-600" />
-            <span>{t('fs.title')}</span>
+          {/* Brand-guide lockup: our own name stays dominant, the relationship
+              is stated as "works with", and FamilySearch is represented by its
+              official full-colour logo (min 32 pt, with clear space). */}
+          <DialogTitle className="pr-8">
+            <FsWorksWithHeader />
           </DialogTitle>
         </DialogHeader>
 
@@ -287,6 +290,13 @@ export function FamilySearchDialog({
             {t('fs.useManualInstead')}
           </button>
         )}
+
+        {/* Credit-notice area: the Solutions Program tier logo plus the required
+            trademark ownership notice. Neither implies sponsorship or endorsement. */}
+        <div className="mt-1 flex flex-col items-center gap-2 border-t border-border/40 pt-3">
+          <FsSolutionBadge />
+          <FsTrademarkNotice className="text-center" />
+        </div>
       </DialogContent>
     </Dialog>
   )

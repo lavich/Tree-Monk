@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ArrowRight, Baby, Heart, Loader2, RefreshCw, Sparkles, UserPlus, Users } from 'lucide-react'
+import { ArrowRight, Baby, Heart, Loader2, LogIn, RefreshCw, Sparkles, UserPlus, Users } from 'lucide-react'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
@@ -38,26 +38,34 @@ export function FsPersonSyncDialog({
   fid: string
   onApplied: () => void | Promise<void>
 }): JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
   const [fields, setFields] = useState<FieldDiff[]>([])
   const [relatives, setRelatives] = useState<Relative[]>([])
   const [content, setContent] = useState<Counts | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [signedOut, setSignedOut] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
+  const load = (): void => {
     setFields([])
     setRelatives([])
     setContent(null)
     setError(null)
+    setSignedOut(false)
     setLoading(true)
     void window.api.familysearch
       .syncPreview(personId)
       .then((r) => {
-        if ('error' in r) setError(r.error === 'NOT_SIGNED_IN' ? t('fs.signInFirst') : t('fs.diffFailed'))
-        else {
+        if ('error' in r) {
+          if (r.error === 'NOT_SIGNED_IN') {
+            setSignedOut(true)
+            setError(t('fs.signInFirst'))
+          } else {
+            setError(t('fs.diffFailed'))
+          }
+        } else {
           setFields(r.fields)
           setRelatives(r.newRelatives)
           setContent(r.content)
@@ -65,7 +73,25 @@ export function FsPersonSyncDialog({
       })
       .catch(() => setError(t('fs.diffFailed')))
       .finally(() => setLoading(false))
-  }, [open, personId, t])
+  }
+
+  useEffect(() => {
+    if (!open) return
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, personId])
+
+  /** Sign in right here (system-browser OAuth), then reload the preview. */
+  const signIn = async (): Promise<void> => {
+    setSigningIn(true)
+    try {
+      const r = await window.api.familysearch.login(i18n.language)
+      if (r.ok) load()
+      else toast.error(t('fs.loginFailed'))
+    } finally {
+      setSigningIn(false)
+    }
+  }
 
   const fieldLabel = (f: string): string => t(`fs.f_${f}`, { defaultValue: f })
   const newContent = content
@@ -109,9 +135,17 @@ export function FsPersonSyncDialog({
             <Loader2 className="h-4 w-4 animate-spin" /> {t('fs.diffLoading')}
           </div>
         ) : error ? (
-          <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </p>
+          <div className="space-y-3">
+            <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </p>
+            {signedOut && (
+              <Button onClick={() => void signIn()} disabled={signingIn} className="w-full gap-2">
+                {signingIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+                {signingIn ? t('fs.signingIn') : t('fs.signInNow')}
+              </Button>
+            )}
+          </div>
         ) : !hasChanges ? (
           <p className="rounded-lg border border-border bg-muted/40 p-3 text-center text-sm text-muted-foreground">
             {t('fs.noChanges')}

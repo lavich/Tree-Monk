@@ -414,6 +414,7 @@ export function createDemoApi(): TreeMonkApi {
     workspaces: {
       list: async () => [DEMO_WORKSPACE],
       active: async () => DEMO_WORKSPACE,
+      freshBootstrap: async () => false,
       create: async () => blocked(),
       switch: async () => blocked(),
       rename: async () => blocked(),

@@ -25,3 +25,17 @@ export function reimportNoticeSeen(): boolean {
 export function markReimportNoticeSeen(): void {
   localStorage.setItem('tm_fs_reimport_notice', '1')
 }
+
+/**
+ * The 1.8.17 "FamilySearch has arrived — create a NEW family tree to use it"
+ * notice. Deliberately a SEPARATE flag from the old reimport notice: that one
+ * was already marked seen for many users (and for everyone the app defaulted to
+ * Manual), which would have silently swallowed this message for exactly the
+ * people it is meant for.
+ */
+export function fsArrivedNoticeSeen(): boolean {
+  return localStorage.getItem('tm_fs_arrived_notice') === '1'
+}
+export function markFsArrivedNoticeSeen(): void {
+  localStorage.setItem('tm_fs_arrived_notice', '1')
+}

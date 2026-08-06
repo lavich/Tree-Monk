@@ -506,10 +506,19 @@ export const useAppStore = create<AppState>((set, get) => ({
           : {}
       )
     })
-    // Periodically refresh so the tree literally grows while importing.
+    // Periodically refresh so the tree literally grows while importing. During
+    // the enrichment phase the tree STRUCTURE no longer changes (only photos /
+    // sources trickle in), so refresh much less often — the frequent full
+    // refreshes on a by-then large database were a main source of UI lag.
+    let lastTick = 0
     const ticker = setInterval(() => {
-      if (get().fsImport?.running) void get().refreshAll()
-    }, 2500)
+      const imp = get().fsImport
+      if (!imp?.running) return
+      const every = imp.phase === 'enriching' ? 10000 : 2500
+      if (Date.now() - lastTick < every) return
+      lastTick = Date.now()
+      void get().refreshAll()
+    }, 1000)
     try {
       const r = await window.api.familysearch.import(opts)
       const people = (r.peopleCreated ?? 0) + (r.peopleUpdated ?? 0)

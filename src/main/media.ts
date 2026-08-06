@@ -1,6 +1,7 @@
 import { app, dialog, shell, BrowserWindow } from 'electron'
 import { mediaAuthHeaders } from './familysearch'
 import { copyFileSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'fs'
+import { writeFile as writeFileAsync } from 'fs/promises'
 import { basename, extname, join } from 'path'
 import { randomUUID } from 'crypto'
 import { mediaDir, resolveMediaPath } from './db/connection'
@@ -166,10 +167,14 @@ export async function downloadRemoteMedia(
   }
 
   // A small worker pool: downloads are network-bound, so a few in flight is far
-  // faster than one-at-a-time, without saturating the main thread. The shared
-  // counter hands each worker the next document (JS is single-threaded, so the
-  // synchronous file/DB writes never actually overlap).
-  const CONCURRENCY = 6
+  // faster than one-at-a-time, without saturating the main thread. Thumbnail
+  // decoding is CPU-heavy and runs on THIS thread, so it is NOT done here —
+  // decoding hundreds of multi-megapixel photos inline is what used to freeze
+  // the whole app during the image phase. Warm-up runs afterwards, spread out.
+  const CONCURRENCY = 3
+  // Only id+path are kept for the warm-up pass — holding every photo's bytes
+  // would balloon memory on a large import; the file is re-read one at a time.
+  const downloaded: { id: string; dest: string }[] = []
   let next = 0
   const worker = async (): Promise<void> => {
     for (;;) {
@@ -186,11 +191,9 @@ export async function downloadRemoteMedia(
           const ct = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
           const ext = EXT_FROM_CT[ct] || extFromUrl(doc.filePath) || '.jpg'
           const dest = join(mediaDir(), `${doc.id}${ext}`)
-          writeFileSync(dest, buf)
+          await writeFileAsync(dest, buf)
           Documents.setFile(doc.id, dest, MIME[ext] || ct || 'image/jpeg', kindFromExt(ext))
-          // Pre-warm the avatar-size thumbnail from the bytes we already have, so
-          // the first family-tree render doesn't decode the originals on demand.
-          void warmThumbnails(doc.id, dest, buf, [128])
+          downloaded.push({ id: doc.id, dest })
           prog.ok++
         } else {
           prog.failed++
@@ -204,6 +207,22 @@ export async function downloadRemoteMedia(
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, docs.length) }, worker))
   emit(true)
+
+  // Pre-warm avatar-size thumbnails AFTER the downloads, one at a time with a
+  // breather between each, so the decodes never stall the UI; anything not
+  // warmed here is generated lazily (and cached) on first view anyway.
+  void (async () => {
+    const { readFile } = await import('fs/promises')
+    for (const d of downloaded) {
+      try {
+        const buf = await readFile(d.dest)
+        await warmThumbnails(d.id, d.dest, buf, [128])
+      } catch {
+        /* on-demand path covers it */
+      }
+      await new Promise((r) => setTimeout(r, 25))
+    }
+  })()
   return prog
 }
 

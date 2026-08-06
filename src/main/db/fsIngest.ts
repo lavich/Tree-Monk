@@ -58,6 +58,11 @@ export function applyFsEvents(
         People.update(personId, { christeningDate: e.date ?? null, christeningPlace: e.place ?? null })
         continue
       }
+      // Already carried by the christening field (this or an earlier run routed
+      // it there) — never duplicate it as a loose event on a re-import.
+      if (p && ((e.date && p.christeningDate === e.date) || (!e.date && e.place && p.christeningPlace === e.place))) {
+        continue
+      }
     }
     const key = `${type}|${e.date ?? ''}|${e.place ?? ''}|${e.value ?? ''}`
     Events.importOnce('person', personId, key, {
@@ -175,9 +180,10 @@ function isAutoMemoryTitle(t?: string | null): boolean {
  * title are treated as document scans. The avatar renders once the background
  * download localizes the file. Never overrides an avatar that's already set.
  */
-export function applyFsMedia(personId: string, media?: { u: string; t: string | null }[]): void {
+export function applyFsMedia(personId: string, media?: { u: string; t: string | null; p?: 1 }[]): void {
   if (!media?.length) return
   let firstPortrait: string | null = null
+  let flaggedPortrait: string | null = null
   for (const m of media) {
     const url = (m.u ?? '').trim()
     if (!/^https?:\/\//i.test(url)) continue
@@ -198,8 +204,12 @@ export function applyFsMedia(personId: string, media?: { u: string; t: string | 
         docId
       )
     }
+    // The engine marks the FamilySearch portrait explicitly (p) — that wins;
+    // the untitled-image heuristic remains the fallback for other sources.
+    if (m.p && !flaggedPortrait) flaggedPortrait = docId
     if (isImg && !firstPortrait && isAutoMemoryTitle(m.t)) firstPortrait = docId
   }
+  if (flaggedPortrait) firstPortrait = flaggedPortrait
   if (firstPortrait) {
     const p = People.get(personId)
     if (p && !p.profilePhotoId) People.update(personId, { profilePhotoId: firstPortrait })
@@ -277,7 +287,7 @@ interface PersonNode {
   un?: string | null
   alt?: { g: string; s: string }[]
   /** Memories (photos / document scans): { u: url, t: title }. */
-  media?: { u: string; t: string | null }[]
+  media?: { u: string; t: string | null; p?: 1 }[]
   /** Occupation facts (a person may hold several). `note` carries the user's reason. */
   oc?: { title: string; date: string | null; place: string | null; note?: string | null }[]
   /** Non-vital life events (residence, military, …). `no` carries the user's reason. */
@@ -364,6 +374,12 @@ export class FsIngester {
   familiesCreated = 0
   familiesUpdated = 0
 
+  /** FS ids of the persons this run CREATED (not pre-existing) — the post-import
+   *  cleanup may remove those of them that ended up connected to nobody. */
+  get newFids(): string[] {
+    return [...this.newThisRun]
+  }
+
   private ensurePerson(fid: string): string {
     const cached = this.fsToPerson.get(fid)
     if (cached) return cached
@@ -394,12 +410,27 @@ export class FsIngester {
     return null
   }
 
-  /** FamilySearch godparent ("Other Relationship") edge → godparents table. Both
-   *  the godchild and the godparent are streamed as full people first, so by the
-   *  time this edge arrives they already resolve to local ids. */
+  /** Resolve a fid to a local person id WITHOUT creating anyone: this run's
+   *  stream first, then the database (persons imported in an earlier run). */
+  private personIdOf(fid: string): string | null {
+    const cached = this.fsToPerson.get(fid)
+    if (cached) return cached
+    const existing = People.findByFsId(fid)
+    if (existing) {
+      this.fsToPerson.set(fid, existing.id)
+      this.preExisting.add(fid)
+      return existing.id
+    }
+    return null
+  }
+
+  /** FamilySearch godparent ("Other Relationship") edge → godparents table.
+   *  Resolves BOTH ends against this run's stream AND the database — a fresh
+   *  ingester (e.g. the single-person sync) used to drop the edge silently
+   *  when the godparent already lived in the DB from an earlier import. */
   private ingestGodparent(n: GodparentNode): null {
-    const childId = this.fsToPerson.get(n.c)
-    const gpId = this.fsToPerson.get(n.p)
+    const childId = this.personIdOf(n.c)
+    const gpId = this.personIdOf(n.p)
     if (childId && gpId && childId !== gpId) Godparents.add(childId, gpId)
     return null
   }
@@ -440,15 +471,22 @@ export class FsIngester {
       const ck = `${personId}:${sourceId}`
       if (!this.citationSeen.has(ck)) {
         this.citationSeen.add(ck)
-        Citations.create({
-          sourceId,
-          ownerType: 'person',
-          ownerId: personId,
-          eventTag: n.ft || null,
-          page: n.pg || null,
-          quality: null,
-          note: n.no || null
-        })
+        // ACROSS-RUN dedupe: the in-memory set only guards this run — without
+        // the DB check every re-import duplicated the person's citations.
+        const dup = this.db
+          .prepare("SELECT 1 FROM citations WHERE owner_type='person' AND owner_id = ? AND source_id = ? LIMIT 1")
+          .get(personId, sourceId)
+        if (!dup) {
+          Citations.create({
+            sourceId,
+            ownerType: 'person',
+            ownerId: personId,
+            eventTag: n.ft || null,
+            page: n.pg || null,
+            quality: null,
+            note: n.no || null
+          })
+        }
       }
     })()
     return null

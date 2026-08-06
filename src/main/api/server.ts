@@ -56,6 +56,12 @@ export function setApiChangeBroadcaster(fn: () => void): void {
   broadcast = fn
 }
 
+/** Tell every open window to refresh — for main-side background jobs (e.g. the
+ *  post-import place standardization) that change data outside the UI's flow. */
+export function notifyDataChanged(): void {
+  broadcast()
+}
+
 function envBool(name: string): boolean | null {
   const v = process.env[name]
   if (v === undefined) return null

@@ -1,41 +1,55 @@
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle } from 'lucide-react'
+import { Info, Plus, TreeDeciduous } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ModeChooser } from './ModeChooser'
-import { markReimportNoticeSeen, setFsMode } from '@/lib/fsMode'
+import { Button } from '@/components/ui/button'
+import { markFsArrivedNoticeSeen } from '@/lib/fsMode'
 
 /**
- * One-time notice for users upgrading with an EXISTING database: the new
- * FamilySearch integration needs a fresh import. The same strict two-step
- * chooser as the first launch — Manual keeps everything as-is.
+ * One-time notice for users upgrading with an EXISTING, non-FamilySearch tree:
+ * the FamilySearch integration has arrived, but the two modes are strictly
+ * separated, so an existing manual/GEDCOM tree cannot be switched over — they
+ * need to create a NEW family tree from the switcher in the top-left corner.
+ *
+ * Purely informational: it changes no mode and never touches the current tree.
  */
 export function ReimportNoticeDialog({
   open,
-  onOpenChange,
-  onChooseFs
+  onOpenChange
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  onChooseFs: () => void
 }): JSX.Element {
   const { t } = useTranslation()
-  const done = (fs: boolean): void => {
-    markReimportNoticeSeen()
-    setFsMode(fs)
+  const close = (): void => {
+    markFsArrivedNoticeSeen()
     onOpenChange(false)
-    if (fs) onChooseFs()
   }
   return (
-    <Dialog open={open} onOpenChange={() => undefined}>
-      <DialogContent className="max-w-xl" onInteractOutside={(e) => e.preventDefault()}>
+    <Dialog open={open} onOpenChange={(o) => !o && close()}>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="pr-8">{t('reimport.title')}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 pr-8">
+            <TreeDeciduous className="h-5 w-5 shrink-0 text-emerald-600" />
+            {t('reimport.title')}
+          </DialogTitle>
         </DialogHeader>
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{t('reimport.warning')}</span>
+
+        <p className="text-sm leading-relaxed text-muted-foreground">{t('reimport.intro')}</p>
+
+        {/* The concrete instruction, pointing at the real control (top-left). */}
+        <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm leading-relaxed text-emerald-800 dark:text-emerald-300">
+          <Plus className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{t('reimport.howTo')}</span>
         </div>
-        <ModeChooser onDone={done} />
+
+        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{t('reimport.keepSafe')}</span>
+        </div>
+
+        <div className="flex justify-end">
+          <Button onClick={close}>{t('reimport.ok')}</Button>
+        </div>
       </DialogContent>
     </Dialog>
   )

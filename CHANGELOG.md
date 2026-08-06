@@ -2,6 +2,50 @@
 
 All notable changes to TreeMonk are documented here.
 
+## [1.8.17]
+
+### Added
+- **FamilySearch integration is live in the free edition — READ-ONLY.** The
+  AppKey is baked in at build time from the `FS_CLIENT_ID` repository secret
+  (`MAIN_VITE_FS_ENV: production`); without a key the whole integration stays
+  dormant exactly as before. All 18 `familysearch:*` IPC channels are reads —
+  import, single-person sync, expand, search, lookup, preview, date
+  normalization — and `FsPushDialog` does not exist in this build. Data moves
+  one way: FamilySearch → TreeMonk.
+- **Sign in / sign out row** in Settings → Data, and the first-launch
+  "Start from FamilySearch" card now follows `familysearch.configured()`
+  instead of being hard-disabled ("coming soon" only in keyless builds).
+- **Local-first browser app** (treemonk.eu/webapp) replaces the read-only demo:
+  the full editable app with the database persisted in the visitor's own
+  browser storage (OPFS, IndexedDB fallback) — no cloud, no account. Shared
+  migrations moved to `src/main/db/migrations.ts` so both runtimes run them.
+- `workspaces:freshBootstrap` IPC + `wasFreshBootstrap()` /
+  `markActiveWorkspaceKind()`, and `removeDisconnectedImports()` in `db/admin`.
+- **One-time "a new family tree is needed" notice** on startup for users with an
+  existing non-FS tree: FamilySearch and manual/GEDCOM modes live in separate
+  trees, so the popup points at the workspace switcher in the top-left corner.
+  `ReimportNoticeDialog` was repurposed for it (purely informational now: it no
+  longer embeds `ModeChooser` and changes no mode), gated on a NEW
+  `tm_fs_arrived_notice` flag â€” the old `tm_fs_reimport_notice` was already set
+  for most of the target audience and would have swallowed the message.
+
+### Fixed
+- **FamilySearch mode is derived from the data**, not from a fragile flag: a
+  tree containing FS-linked people (or a live FS session) is treated as an FS
+  tree, restoring the integration for anyone whose flag had been zeroed. The
+  legacy "default existing users to Manual" path now runs only when no choice
+  was ever made, instead of resetting a chosen FS mode on every restart.
+- A profile bootstrapped from nothing (fresh install / wiped data folder)
+  clears the stale start-choice flags, so the start chooser appears again.
+- The "interrupted import" warning fires once per run and never while an
+  import is actually running (a language switch used to re-trigger it).
+- **FamilySearch write boilerplate no longer round-trips into local data**:
+  per-fact reason statements ending in "via TreeMonk" are dropped on read, and
+  custom FS fact types (`data:,Baptism`) are normalised to their bare label.
+- Media download no longer decodes thumbnails inline on the main thread
+  (lower concurrency + async writes + deferred warm-up), so large imports stay
+  responsive.
+
 ## [1.8.16]
 
 ### Added

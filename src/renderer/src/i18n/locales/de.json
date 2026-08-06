@@ -61,6 +61,11 @@
     "privacyNote": "Es werden nur deine Bewertung, deine Nachricht und die App-Version gesendet — keine Stammbaumdaten.",
     "later": "Jetzt nicht"
   },
+  "about": {
+    "title": "Über",
+    "copyright": "© 2026 TreeMonk · Alle Rechte vorbehalten",
+    "fsCredit": "TreeMonk arbeitet mit FamilySearch zusammen:"
+  },
   "feedback": {
     "section": "Rückmeldung",
     "title": "Schreib dem Entwickler",
@@ -368,7 +373,7 @@
     "deleteConfirm": "Die ganze Unterhaltung löschen? Das entfernt sie vom Server und von deinem Gerät — nicht widerrufbar."
   },
   "nav": {
-    "collapse": "Menü einklappen",
+    "collapse": "Ahnenschwund",
     "expand": "Menü ausklappen",
     "menu": "Menü",
     "help": "Hilfe",
@@ -381,7 +386,6 @@
     "issues": "Datenprobleme",
     "query": "Abfrage",
     "kinship": "Verwandtschaft",
-    "collapse": "Ahnenschwund",
     "famous": "Berühmte Verwandte",
     "audit": "Verlauf",
     "calendar": "Kalender",
@@ -887,7 +891,9 @@
     "indexExportBtn": "Verzeichnisse (HTML)",
     "sectionImportExport": "Import / Export",
     "sectionApi": "Lokale API",
-    "sectionHelp": "Hilfe & Feedback"
+    "sectionHelp": "Hilfe & Feedback",
+    "fsSignedInDesc": "Angemeldet — Sync, Suche und Ortssuche nutzen FamilySearch.",
+    "fsSignedOutDesc": "Nicht angemeldet. Zum Sync und Import bitte anmelden."
   },
   "common": {
     "done": "Fertig",
@@ -922,7 +928,8 @@
     "renameTitle": "Stammbaum umbenennen",
     "namePlaceholder": "z. B. Stammbaum von Max Mustermann",
     "deleteTitle": "„{{name}}“ löschen?",
-    "deleteConsequence": "Entfernt den Stammbaum aus der Liste. Die Datendatei bleibt auf der Festplatte und kann später wieder hinzugefügt werden."
+    "deleteConsequence": "Entfernt den Stammbaum aus der Liste. Die Datendatei bleibt auf der Festplatte und kann später wieder hinzugefügt werden.",
+    "kindManual": "Manuell · GEDCOM"
   },
   "delete": {
     "docTitle": "{{name}} löschen",
@@ -1508,7 +1515,12 @@
     "desc": "Anmelden und synchronisieren mit der offiziellen FamilySearch-API.",
     "openBtn": "Öffnen",
     "noClientId": "Der FamilySearch-Entwicklerschlüssel (AppKey) ist in diesem Build noch nicht konfiguriert.",
-    "signInHelp": "Die Anmeldung erfolgt auf der eigenen Seite von FamilySearch, in deinem System-Browser. TreeMonk sieht dein Passwort nie.",
+    "signInHelp": "Die Anmeldung erfolgt auf der FamilySearch Website, in deinem System-Browser. TreeMonk sieht dein Passwort nie.",
+    "brand": {
+      "worksWith": "arbeitet mit FamilySearch zusammen",
+      "tierAlt": "FamilySearch Solutions Program Logo",
+      "galleryLink": "Unseren Eintrag in der FamilySearch Solutions Gallery ansehen"
+    },
     "signInBtn": "Bei FamilySearch anmelden",
     "signedIn": "Angemeldet",
     "loginFailed": "Anmeldung fehlgeschlagen. Bitte erneut versuchen.",
@@ -1614,7 +1626,11 @@
     "maxPersons": "Max. Personenzahl",
     "depthWarning": "Das können viele Personen sein! Der Import stoppt bei {{max}} — direkte Vorfahren und ihre Familien haben Vorrang.",
     "priorityNote": "Priorität: direkte Vorfahren → deren Kinder → Nachkommen.",
-    "dataResaleNotice": "Der Verkauf, die Vermietung oder die Unterlizenzierung von über diese Software aus FamilySearch gewonnenen Daten an Dritte ist untersagt."
+    "dataResaleNotice": "Der Verkauf, die Vermietung oder die Unterlizenzierung von über diese Software aus FamilySearch gewonnenen Daten an Dritte ist untersagt.",
+    "signInNow": "Bei FamilySearch anmelden",
+    "signingIn": "Anmeldung läuft…",
+    "loginOk": "Bei FamilySearch angemeldet.",
+    "signedOutToast": "Von FamilySearch abgemeldet."
   },
   "demo": {
     "introTitle": "Willkommen in der TreeMonk-Demo!",
@@ -2082,10 +2098,11 @@
     "fsComingDesc": "Die FamilySearch-Integration kommt bald. Starte vorerst im manuellen / GEDCOM-Modus."
   },
   "reimport": {
-    "title": "Wichtig: FamilySearch-Neuerungen",
-    "warning": "Wenn deine Datenbank mit einer früheren TreeMonk-Version erstellt wurde, erfordern die FamilySearch-Funktionen einen Neuimport deines Baums (der alte Import enthält nicht alle Daten). Im manuellen/GEDCOM-Modus funktioniert alles unverändert weiter.",
-    "fsDesc": "Jetzt anmelden — dann importiere deinen Baum neu, damit alles (Fotos, Notizen, Quellen, Sync) funktioniert.",
-    "manualDesc": "Alles bleibt wie es ist. FamilySearch-Funktionen können später in den Einstellungen aktiviert werden."
+    "title": "FamilySearch – ein neuer Stammbaum ist nötig",
+    "intro": "Die FamilySearch-Integration ist da! Der FamilySearch-Modus und der manuelle/GEDCOM-Modus leben in getrennten Stammbäumen, ein bestehender Stammbaum lässt sich daher nicht umstellen.",
+    "howTo": "Um FamilySearch zu nutzen, lege oben links mit dem Umschalter „Stammbaum“ einen neuen Stammbaum an (Neuer Stammbaum…) und wähle dann im Startdialog FamilySearch.",
+    "keepSafe": "Dein jetziger Stammbaum bleibt unangetastet — über denselben Umschalter kannst du jederzeit zu ihm zurückwechseln.",
+    "ok": "Verstanden"
   },
   "fsScan": {
     "button": "Änderungen",
@@ -2111,6 +2128,8 @@
   },
   "fsImport": {
     "growing": "Dein Baum wächst…",
+    "enriching": "Fotos, Notizen und Quellen werden geladen…",
+    "stop": "Stoppen",
     "done": "{{people}} Personen · {{families}} Familien importiert",
     "hint": "Der Import läuft im Hintergrund — sieh zu, wie dein Baum wächst.",
     "open": "Öffnen",

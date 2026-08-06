@@ -15,12 +15,14 @@
  * into the existing FsNode stream (fsIngest); writes build GEDCOM-X objects and
  * POST them back to the shared Family Tree.
  */
-import { safeStorage, shell } from 'electron'
+import { app, safeStorage, shell } from 'electron'
 import { createServer, type Server } from 'http'
 import { createHash, randomBytes } from 'crypto'
 import { wipeDatabase } from './db/admin'
-import { AppSettings, Citations, Documents, Events, Occupations, People } from './db/repo'
+import { AppSettings, Citations, Documents, Events, Occupations, People, Places } from './db/repo'
 import { readFile } from 'fs/promises'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
+import { join as joinPath } from 'path'
 import { getDb } from './db/connection'
 import { placeLang } from './geo'
 import { mediaDocId } from './mediaId'
@@ -52,27 +54,50 @@ const GX_MEDIA = 'application/x-gedcomx-v1+json'
 const FS_MEDIA = 'application/x-fs-v1+json'
 const MAX_GEN = 8 // FamilySearch caps ancestry at 8 generations per request
 const GX = 'http://gedcomx.org/'
-const USER_AGENT = 'TreeMonk/1.4 (+https://treemonk.eu)'
+const USER_AGENT = `TreeMonk/${app.getVersion()} (+https://treemonk.eu)`
 
 export function isFamilySearchConfigured(): boolean {
   return !!FS_CLIENT_ID
 }
 
 // ---- Token state (access ~24h, refresh ~90d if granted). Persisted across
-// restarts, encrypted with the OS keychain (safeStorage) when available. ------
+// restarts, encrypted with the OS keychain (safeStorage) when available.
+// GLOBAL, file-based storage: the FamilySearch session belongs to the USER,
+// not to a tree. It used to live in the per-workspace database — with several
+// trees the app could start on a workspace without the tokens and look
+// spontaneously signed out. The legacy per-workspace value is adopted once. --
 let cachedToken: string | null = null
 let cachedRefresh: string | null = null
 let tokensLoaded = false
 
+function sessionFile(): string {
+  return joinPath(app.getPath('userData'), 'fs-session.bin')
+}
+
+function encodeTokens(): string {
+  const payload = JSON.stringify({ a: cachedToken, r: cachedRefresh })
+  if (safeStorage.isEncryptionAvailable()) {
+    return 'enc:' + safeStorage.encryptString(payload).toString('base64')
+  }
+  // No OS keychain (rare) — store obfuscated; the access token expires in 24h.
+  return 'b64:' + Buffer.from(payload).toString('base64')
+}
+
+function decodeTokens(raw: string): void {
+  const payload = raw.startsWith('enc:')
+    ? safeStorage.decryptString(Buffer.from(raw.slice(4), 'base64'))
+    : raw.startsWith('b64:')
+      ? Buffer.from(raw.slice(4), 'base64').toString('utf8')
+      : null
+  if (!payload) return
+  const t = JSON.parse(payload) as { a?: string | null; r?: string | null }
+  cachedToken = t.a ?? null
+  cachedRefresh = t.r ?? null
+}
+
 function persistTokens(): void {
   try {
-    const payload = JSON.stringify({ a: cachedToken, r: cachedRefresh })
-    if (safeStorage.isEncryptionAvailable()) {
-      AppSettings.set('fs_tokens', 'enc:' + safeStorage.encryptString(payload).toString('base64'))
-    } else {
-      // No OS keychain (rare) — store obfuscated; the access token expires in 24h.
-      AppSettings.set('fs_tokens', 'b64:' + Buffer.from(payload).toString('base64'))
-    }
+    writeFileSync(sessionFile(), encodeTokens(), 'utf8')
   } catch {
     /* persistence is best-effort */
   }
@@ -82,17 +107,16 @@ function loadTokens(): void {
   if (tokensLoaded) return
   tokensLoaded = true
   try {
-    const raw = AppSettings.get('fs_tokens')
-    if (!raw) return
-    const payload = raw.startsWith('enc:')
-      ? safeStorage.decryptString(Buffer.from(raw.slice(4), 'base64'))
-      : raw.startsWith('b64:')
-        ? Buffer.from(raw.slice(4), 'base64').toString('utf8')
-        : null
-    if (!payload) return
-    const t = JSON.parse(payload) as { a?: string | null; r?: string | null }
-    cachedToken = t.a ?? null
-    cachedRefresh = t.r ?? null
+    if (existsSync(sessionFile())) {
+      decodeTokens(readFileSync(sessionFile(), 'utf8'))
+      return
+    }
+    // Legacy location (per-workspace DB) → adopt into the global file once.
+    const legacy = AppSettings.get('fs_tokens')
+    if (legacy) {
+      decodeTokens(legacy)
+      if (cachedToken) persistTokens()
+    }
   } catch {
     /* corrupted/undecryptable → start signed out */
   }
@@ -101,7 +125,16 @@ function loadTokens(): void {
 function clearTokens(): void {
   cachedToken = null
   cachedRefresh = null
-  AppSettings.set('fs_tokens', null)
+  try {
+    if (existsSync(sessionFile())) unlinkSync(sessionFile())
+  } catch {
+    /* ignore */
+  }
+  try {
+    AppSettings.set('fs_tokens', null)
+  } catch {
+    /* the legacy per-workspace slot is best-effort */
+  }
 }
 
 export function getCachedToken(): string | null {
@@ -255,24 +288,38 @@ async function exchangeCode(
 }
 
 /** Exchange the refresh token for a fresh access token (if the key is granted
- *  refresh tokens; public clients often are not, in which case re-login). */
+ *  refresh tokens; public clients often are not, in which case re-login).
+ *
+ *  SINGLE-FLIGHT: with several requests in parallel, an expired token produces
+ *  a burst of simultaneous 401s — every caller must share ONE refresh attempt.
+ *  Racing refreshes would each spend the (possibly rotating) refresh token:
+ *  the losers came back invalid and wiped the winner's fresh session, which
+ *  showed up as a spontaneous sign-out. */
+let refreshFlight: Promise<boolean> | null = null
 async function tryRefresh(): Promise<boolean> {
+  if (refreshFlight) return refreshFlight
   if (!cachedRefresh) return false
-  const toks = await tokenRequest(
-    new URLSearchParams({
-      grant_type: 'refresh_token',
-      client_id: FS_CLIENT_ID,
-      refresh_token: cachedRefresh
-    })
-  )
-  if (!toks) {
-    cachedRefresh = null
-    return false
-  }
-  cachedToken = toks.access
-  cachedRefresh = toks.refresh ?? cachedRefresh
-  persistTokens()
-  return true
+  refreshFlight = (async () => {
+    const toks = await tokenRequest(
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: FS_CLIENT_ID,
+        refresh_token: cachedRefresh!
+      })
+    )
+    if (!toks) {
+      cachedRefresh = null
+      return false
+    }
+    cachedToken = toks.access
+    cachedRefresh = toks.refresh ?? cachedRefresh
+    persistTokens()
+    return true
+  })()
+  // Late arrivals within the next second share this flight's outcome instead
+  // of immediately spending the fresh refresh token again.
+  void refreshFlight.finally(() => setTimeout(() => { refreshFlight = null }, 1000))
+  return refreshFlight
 }
 
 async function tokenRequest(
@@ -298,12 +345,59 @@ async function tokenRequest(
   }
 }
 
-// ---- API layer (bearer + GEDCOM-X + throttle + 401-refresh) ----------------
-let lastCall = 0
-async function throttle(): Promise<void> {
-  const wait = lastCall + 130 - Date.now()
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait))
-  lastCall = Date.now()
+// ---- API layer (bearer + GEDCOM-X + scheduler + 401-refresh) ----------------
+// Small parallel scheduler instead of a serial throttle: up to MAX_CONCURRENT
+// requests in flight, starts spaced MIN_SPACING apart, and an adaptive global
+// backoff honoring Retry-After whenever FamilySearch answers 429. This is what
+// makes the import fast — several requests overlap instead of queuing one by
+// one — while staying polite the moment the server pushes back.
+const MAX_CONCURRENT = 6
+const MIN_SPACING = 60 // ms between request STARTS
+let activeReqs = 0
+let lastStart = 0
+let backoffUntil = 0
+const reqQueue: (() => void)[] = []
+
+function pumpQueue(): void {
+  if (activeReqs >= MAX_CONCURRENT || reqQueue.length === 0) return
+  const now = Date.now()
+  const at = Math.max(lastStart + MIN_SPACING, backoffUntil)
+  if (at > now) {
+    setTimeout(pumpQueue, at - now)
+    return
+  }
+  lastStart = now
+  activeReqs++
+  reqQueue.shift()!()
+  if (reqQueue.length) pumpQueue()
+}
+
+function acquireSlot(): Promise<void> {
+  return new Promise((r) => {
+    reqQueue.push(r)
+    pumpQueue()
+  })
+}
+function releaseSlot(): void {
+  activeReqs = Math.max(0, activeReqs - 1)
+  pumpQueue()
+}
+/** Pause ALL request starts (all workers) — used on 429/5xx. */
+function backOff(ms: number): void {
+  backoffUntil = Math.max(backoffUntil, Date.now() + ms)
+}
+function retryAfterMs(res: Response, attempt: number): number {
+  const ra = Number(res.headers.get('Retry-After'))
+  return Number.isFinite(ra) && ra > 0 ? ra * 1000 : 2000 * (attempt + 1)
+}
+/** One scheduled fetch: waits for a slot, runs, frees the slot. */
+async function schedFetch(url: string, init: RequestInit): Promise<Response> {
+  await acquireSlot()
+  try {
+    return await fetch(url, init)
+  } finally {
+    releaseSlot()
+  }
 }
 
 async function gxGet(
@@ -313,11 +407,11 @@ async function gxGet(
   loadTokens()
   if (!cachedToken) return { status: 401, doc: null }
   for (let attempt = 0; attempt < 4; attempt++) {
-    await throttle()
-    const res = await fetch(API + path, {
+    const tokenUsed: string | null = cachedToken
+    const res = await schedFetch(API + path, {
       redirect: 'manual',
       headers: {
-        Authorization: `Bearer ${cachedToken}`,
+        Authorization: `Bearer ${tokenUsed}`,
         Accept: media,
         'User-Agent': USER_AGENT,
         // Node's fetch defaults to "accept-language: *", which the Family Tree
@@ -327,7 +421,9 @@ async function gxGet(
     })
     if (res.status === 401 && attempt === 0 && (await tryRefresh())) continue
     if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
-      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)))
+      const wait = retryAfterMs(res, attempt)
+      backOff(wait)
+      await new Promise((r) => setTimeout(r, wait))
       continue
     }
     if (res.status === 204) return { status: 204, doc: null }
@@ -335,11 +431,21 @@ async function gxGet(
       return { status: res.status, doc: null, location: res.headers.get('Location') ?? undefined }
     }
     if (res.status === 401) {
+      // A parallel caller may have refreshed the session while this request was
+      // in flight — retry with the fresh token instead of killing the session.
+      if (cachedToken && cachedToken !== tokenUsed && attempt < 3) continue
       // Expired and unrefreshable → sign out cleanly so the UI prompts again.
       clearTokens()
       return { status: 401, doc: null }
     }
     if (!res.ok) {
+      // A 404 on a person's SUB-collection is FamilySearch's way of saying "this
+      // person has none" — most people have no discussions/memories/sources, so
+      // logging those would flood the console with hundreds of non-errors per
+      // import. Only genuine failures are reported.
+      if (res.status === 404 && /\/(discussion-references|memories|notes|sources|portrait)$/.test(path)) {
+        return { status: res.status, doc: null }
+      }
       // eslint-disable-next-line no-console
       console.error('[fs] GET', path, '→', res.status, (await res.text().catch(() => '')).slice(0, 200))
       return { status: res.status, doc: null }
@@ -359,12 +465,12 @@ async function gxPost(
   loadTokens()
   if (!cachedToken) return { status: 401 }
   for (let attempt = 0; attempt < 4; attempt++) {
-    await throttle()
-    const res = await fetch(API + path, {
+    const tokenUsed: string | null = cachedToken
+    const res = await schedFetch(API + path, {
       method: 'POST',
       redirect: 'manual',
       headers: {
-        Authorization: `Bearer ${cachedToken}`,
+        Authorization: `Bearer ${tokenUsed}`,
         'Content-Type': media,
         Accept: media,
         'User-Agent': USER_AGENT,
@@ -376,8 +482,10 @@ async function gxPost(
     })
     if (res.status === 401 && attempt === 0 && (await tryRefresh())) continue
     if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
-      // Throttled or the beta service is momentarily unavailable — back off and retry.
-      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)))
+      // Throttled or the service is momentarily unavailable — back off and retry.
+      const wait = retryAfterMs(res, attempt)
+      backOff(wait)
+      await new Promise((r) => setTimeout(r, wait))
       continue
     }
     if (res.status >= 200 && res.status < 300) {
@@ -390,6 +498,9 @@ async function gxPost(
       }
     }
     if (res.status === 401) {
+      // A parallel caller may have refreshed the session mid-flight — retry
+      // with the fresh token instead of killing the session.
+      if (cachedToken && cachedToken !== tokenUsed && attempt < 3) continue
       clearTokens()
       return { status: 401, error: 'UNAUTHORIZED' }
     }
@@ -407,9 +518,13 @@ const personUri = (fid: string): string => `${API}/platform/tree/persons/${fid}`
 // ---- Tree selection (the beta AppKey is scoped to "special" user trees) -----
 // Reads (ancestry/sync/search) run against the GLOBAL shared tree; writes go
 // into a TreeMonk-owned user tree — the key cannot create persons in GLOBAL.
+// PRODUCTION has no user-tree switching: everything IS the shared Family Tree,
+// and POSTing /platform/trees/current there just wastes a round-trip per call
+// (or errors) — so tree selection is a no-op outside beta.
 let currentTree: string | null = null
 
 async function selectTree(treeId: string): Promise<boolean> {
+  if (!BETA) return true
   if (currentTree === treeId) return true
   const r = await gxPost('/platform/trees/current', { trees: [{ id: treeId }] }, undefined, FS_MEDIA)
   if (r.status >= 200 && r.status < 300) {
@@ -457,9 +572,11 @@ export async function listFamilySearchTrees(): Promise<FsTreeInfo[]> {
   loadTokens()
   const trees: FsTreeInfo[] = [{ id: 'GLOBAL', name: 'Family Tree', kind: 'global' }]
   if (!cachedToken) return trees
-  await throttle()
+  // Personal trees (groups carrying treeIds) are a beta-environment feature;
+  // production works against the one shared Family Tree only.
+  if (!BETA) return trees
   try {
-    const res = await fetch(`${API}/platform/groups`, {
+    const res = await schedFetch(`${API}/platform/groups`, {
       headers: {
         Authorization: `Bearer ${cachedToken}`,
         Accept: 'application/x-fs-v1+json',
@@ -499,9 +616,19 @@ interface GxExtrasDoc {
 }
 
 export interface PersonExtras {
-  media: { u: string; t: string | null }[]
+  media: { u: string; t: string | null; p?: 1 }[]
   notes: string[]
   sources: FsNode[]
+  /** FamilySearch "Collaborate" discussions attached to the person. */
+  di: { id?: string | null; ti?: string | null; bo?: string; cr?: number | null }[]
+}
+
+/** FamilySearch memory-artifact id from a media URL (both the portrait redirect
+ *  and the memory image links carry /artifacts/{id}/) — used to recognise that
+ *  the portrait IS one of the memories, so the same photo is never filed twice. */
+function artifactIdOf(url: string): string | null {
+  const m = /\/artifacts\/(\d+)/.exec(url)
+  return m ? m[1] : null
 }
 
 /** Read the person document, falling back to the TreeMonk user tree (persons
@@ -529,23 +656,49 @@ async function getPersonDocUncached(fid: string): Promise<GxDocument | null> {
 /** Fetch EVERYTHING the API offers for one person beyond the core record:
  *  portrait, memories (photos/documents), attached sources and notes. */
 async function fetchPersonExtras(fid: string): Promise<PersonExtras> {
-  const media: { u: string; t: string | null }[] = []
+  const media: { u: string; t: string | null; p?: 1 }[] = []
   const notes: string[] = []
   const sources: FsNode[] = []
+  const di: PersonExtras['di'] = []
 
-  // Fetch all four extras concurrently (throttle-bound, but overlaps network
+  // Fetch all extras concurrently (throttle-bound, but overlaps network
   // latency — much faster than one after another).
-  const [por, mem, not, src] = await Promise.all([
+  const [por, mem, not, src, dref] = await Promise.all([
     gxGet(`/platform/tree/persons/${enc(fid)}/portrait`),
     gxGet(`/platform/tree/persons/${enc(fid)}/memories`),
     gxGet(`/platform/tree/persons/${enc(fid)}/notes`),
-    gxGet(`/platform/tree/persons/${enc(fid)}/sources`)
+    gxGet(`/platform/tree/persons/${enc(fid)}/sources`),
+    gxGet(`/platform/tree/persons/${enc(fid)}/discussion-references`, FS_MEDIA)
   ])
 
-  // Portrait: a 307 redirect carries the image URL in Location.
-  // NOTE: title must stay EMPTY — the ingester treats untitled images as the
-  // person's portrait (avatar); a titled one would become a document scan.
-  if (por.location) media.push({ u: por.location, t: null })
+  // Discussions ("Collaborate" tab): references first, then each discussion's
+  // title/details. Most persons have none, so this usually costs nothing.
+  interface DiscussionRef {
+    resource?: string
+    resourceId?: string
+  }
+  interface DiscussionDoc {
+    discussions?: { id?: string; title?: string; details?: string; created?: number | string }[]
+  }
+  const refs =
+    ((dref.doc as unknown as { persons?: { 'discussion-references'?: DiscussionRef[] }[] } | null)?.persons?.[0]?.[
+      'discussion-references'
+    ] ?? [])
+      .map((r) => r.resourceId ?? (r.resource ? r.resource.replace(/^.*\/discussions\//, '').replace(/[/?].*$/, '') : null))
+      .filter((x): x is string => !!x)
+      .slice(0, 10)
+  for (const id of refs) {
+    const d = await gxGet(`/platform/discussions/${enc(id)}`, FS_MEDIA)
+    const disc = (d.doc as unknown as DiscussionDoc | null)?.discussions?.[0]
+    if (!disc) continue
+    const created =
+      typeof disc.created === 'number'
+        ? disc.created
+        : disc.created
+          ? Date.parse(disc.created) || null
+          : null
+    di.push({ id: disc.id ?? id, ti: disc.title ?? null, bo: disc.details ?? '', cr: created })
+  }
 
   // Memories: photos / document scans / stories attached to the person.
   for (const d of ((mem.doc as unknown as GxExtrasDoc | null)?.sourceDescriptions ?? [])) {
@@ -553,6 +706,17 @@ async function fetchPersonExtras(fid: string): Promise<PersonExtras> {
     if (url && !media.some((m) => m.u === url)) {
       media.push({ u: url, t: d.titles?.[0]?.value ?? null })
     }
+  }
+
+  // Portrait: a 307 redirect carries the image URL in Location. The portrait is
+  // usually one of the memories cropped — recognise that by the shared artifact
+  // id and mark THAT memory as the portrait instead of filing the same photo
+  // twice. Only a portrait with no matching memory is added as its own entry.
+  if (por.location) {
+    const aid = artifactIdOf(por.location)
+    const twin = aid ? media.find((m) => artifactIdOf(m.u) === aid) : undefined
+    if (twin) twin.p = 1
+    else media.unshift({ u: por.location, t: null, p: 1 })
   }
 
   // Notes (subject + text).
@@ -579,7 +743,7 @@ async function fetchPersonExtras(fid: string): Promise<PersonExtras> {
     })
   }
 
-  return { media, notes, sources }
+  return { media, notes, sources, di }
 }
 
 /** Fill any FS-linked person left EMPTY after an import (a stub created by a
@@ -618,6 +782,7 @@ export async function fillEmptyFsPersons(
         const extras = await fetchPersonExtras(fid)
         if (extras.media.length) n.media = extras.media
         if (extras.notes.length) n.no = extras.notes
+        if (extras.di.length) n.di = extras.di
         onNode?.(n)
         for (const sn of extras.sources) onNode?.(sn)
         if (r.doc) for (const rn of relationshipNodes(r.doc)) onNode?.(rn)
@@ -637,9 +802,8 @@ export async function fillEmptyFsPersons(
 async function gxGetAtom(path: string): Promise<{ ids: string[]; next: string | null }> {
   loadTokens()
   if (!cachedToken) return { ids: [], next: null }
-  await throttle()
   try {
-    const res = await fetch(API + path, {
+    const res = await schedFetch(API + path, {
       headers: {
         Authorization: `Bearer ${cachedToken}`,
         Accept: 'application/x-gedcomx-atom+json',
@@ -731,32 +895,126 @@ export async function importFromFamilySearch(
     gen: number
     role: Role
     prio: number
+    /** Collateral chain length below the direct line (sibling of an ancestor = 1,
+     *  their child = 2, …) — bounded by the descend setting, so the side pull
+     *  can't cascade past what the user configured. */
+    side: number
   }
   const gen = new Map<string, number>()
   const role = new Map<string, Role>()
   const allEdges: FsNode[] = []
-  const pq: Item[] = [{ fid: root, gen: 0, role: 'root', prio: 0 }]
+  const pq: Item[] = [{ fid: root, gen: 0, role: 'root', prio: 0, side: 0 }]
   gen.set(root, 0)
   role.set(root, 'root')
 
-  const consider = (fid: string, g: number, rl: Role, prio: number): void => {
+  const consider = (fid: string, g: number, rl: Role, prio: number, side = 0): void => {
     if (gen.has(fid)) return
     if (gen.size >= maxPersons) return // person cap reached — stop widening
     gen.set(fid, g)
     role.set(fid, rl)
-    pq.push({ fid, gen: g, role: rl, prio })
+    pq.push({ fid, gen: g, role: rl, prio, side })
   }
 
+  // SINGLE-PASS streaming: each popped person is fetched COMPLETELY (record +
+  // portrait + notes + sources) and emitted IMMEDIATELY, then their /families
+  // edges are queued. After every person, any queued edge whose endpoints are
+  // all already emitted is flushed — so the tree visibly grows person by person
+  // AND the relationships wire up live, not in one burst at the end.
   status(onStatus, 'ancestors')
-  while (pq.length && !cancelled && gen.size <= maxPersons) {
-    // Pop the highest-priority (lowest prio number) item.
+  const emitted = new Set<string>()
+  const edgeSeen = new Set<string>()
+  let processed = 0
+
+  // The key includes the marriage payload for couple edges: the same pair can
+  // legitimately arrive once bare (from /families) and once enriched with the
+  // marriage facts (from the couple-relationship detail) — the ingester merges
+  // them non-destructively, so both must pass; only true copies collapse.
+  const edgeKey = (e: FsNode): string =>
+    e.t === 'f'
+      ? 'f:' + [e.a, e.b].sort().join('|') + `:${e.md ?? ''}|${e.mp ?? ''}|${e.mn ?? ''}`
+      : e.t === 'c'
+        ? `c:${[e.f ?? '', e.m ?? ''].sort().join('|')}>${e.c}`
+        : e.t === 'gp'
+          ? `gp:${e.p}>${e.c}`
+          : JSON.stringify(e)
+
+  const queueEdges = (edges: FsNode[]): void => {
+    for (const e of edges) {
+      const k = edgeKey(e)
+      if (edgeSeen.has(k)) continue
+      edgeSeen.add(k)
+      allEdges.push(e)
+    }
+  }
+
+  // final=false: emit only edges whose EVERY named endpoint is already emitted
+  // (a 'c' edge waits for both named parents, so no half-family churn mid-run).
+  // final=true: today's end-of-import semantics — drop never-fetched parents,
+  // keep the edge if the child plus at least one parent made it in.
+  const flushEdges = (final: boolean): void => {
+    for (let i = 0; i < allEdges.length; i++) {
+      const e = allEdges[i]
+      let out: FsNode | null = null
+      if (e.t === 'f') {
+        if (emitted.has(e.a) && emitted.has(e.b)) out = e
+      } else if (e.t === 'c') {
+        if (!emitted.has(e.c)) continue
+        const fOk = !e.f || emitted.has(e.f)
+        const mOk = !e.m || emitted.has(e.m)
+        if (fOk && mOk) {
+          out = e
+        } else if (final) {
+          const f = e.f && emitted.has(e.f) ? e.f : null
+          const m = e.m && emitted.has(e.m) ? e.m : null
+          if (f || m) out = { t: 'c', f, m, c: e.c }
+        }
+      } else if (e.t === 'gp') {
+        if (emitted.has(e.c) && emitted.has(e.p)) out = e
+      } else {
+        out = e
+      }
+      if (out) {
+        onNode(out)
+        allEdges.splice(i, 1)
+        i--
+      }
+    }
+  }
+
+  // Emitted person nodes by fid — the enrichment phase re-emits them with the
+  // extras attached (the ingester fills non-destructively, so this is safe).
+  const nodeByFid = new Map<string, FsNode & { t: 'i' }>()
+
+  const popBest = (): Item | null => {
+    if (!pq.length) return null
     let mi = 0
     for (let i = 1; i < pq.length; i++) if (pq[i].prio < pq[mi].prio) mi = i
-    const it = pq.splice(mi, 1)[0]
+    return pq.splice(mi, 1)[0]
+  }
+
+  const processItem = async (it: Item): Promise<void> => {
     const hops = Math.abs(it.gen)
-    const fam = await fetchPersonFamilies(it.fid, treeId)
+    await selectTree(treeId)
+    // The person record and their families are independent — fetch both at once.
+    // Extras (portrait/photos/notes/sources) are DEFERRED to the enrichment
+    // phase, so the tree core needs only these ~2 requests per person.
+    const [pr, fam] = await Promise.all([
+      gxGet(`/platform/tree/persons/${enc(it.fid)}`),
+      fetchPersonFamilies(it.fid, treeId)
+    ])
+    const gp = pr.doc?.persons?.find((x) => x.id === it.fid) ?? pr.doc?.persons?.[0]
+    const n = gp ? personToNode(gp) : null
+    if (n && n.t === 'i') {
+      onNode(n)
+      emitted.add(it.fid)
+      nodeByFid.set(it.fid, n as FsNode & { t: 'i' })
+      processed++
+      status(onStatus, 'processed', { name: `${n.g} ${n.s}`.trim() || it.fid, count: processed })
+    }
+    if (cancelled) return
+
     recordKnownRelatives(it.fid, fam.relatives.map((r) => r.fid))
-    allEdges.push(...fam.edges)
+    queueEdges(fam.edges)
     for (const rel of fam.relatives) {
       if (rel.kind === 'spouse') {
         // A spouse on the DIRECT line (the root, or a direct ancestor) is a
@@ -765,7 +1023,7 @@ export async function importFromFamilySearch(
         if (it.role === 'root' || it.role === 'ancestor') {
           consider(rel.fid, it.gen, 'ancestor', it.prio + 0.5)
         } else {
-          consider(rel.fid, it.gen, 'spouse', it.prio + 0.5)
+          consider(rel.fid, it.gen, 'spouse', it.prio + 0.5, it.side)
         }
       } else if (rel.kind === 'parent') {
         // Direct ancestral line (top priority): only from root/ancestor, up to ascend.
@@ -778,54 +1036,89 @@ export async function importFromFamilySearch(
           if (-it.gen < descend) consider(rel.fid, it.gen - 1, 'descendant', 100000 + hops)
         } else if (it.role === 'ancestor' || it.role === 'collateral') {
           // Children of an ancestor = collateral relatives (after the direct
-          // line, before root's descendants).
-          consider(rel.fid, it.gen - 1, 'collateral', 1000 + hops)
+          // line, before root's descendants). The chain is BOUNDED by the same
+          // descend setting: 1 → siblings/aunts/uncles only, 2 → + their
+          // children (cousins), … — previously it cascaded without limit.
+          if (it.side < descend) consider(rel.fid, it.gen - 1, 'collateral', 1000 + hops, it.side + 1)
         }
       }
     }
+
+    // Wire up everything that just became complete. Synchronous (no await), so
+    // concurrent workers can never interleave inside it.
+    flushEdges(false)
   }
 
-  // Fetch every collected person COMPLETELY (record + portrait + notes +
-  // sources). Persons are emitted here, before any edge.
-  const fids = [...gen.keys()]
-  const fidSet = new Set(fids)
-  let processed = 0
-  for (const fid of fids) {
-    if (cancelled) break
-    await selectTree(treeId)
-    const r = await gxGet(`/platform/tree/persons/${enc(fid)}`)
-    const gp = r.doc?.persons?.find((x) => x.id === fid) ?? r.doc?.persons?.[0]
-    const n = gp ? personToNode(gp) : null
-    if (!n || n.t !== 'i') continue
-    const extras = await fetchPersonExtras(fid)
-    if (extras.media.length) n.media = extras.media
-    if (extras.notes.length) n.no = extras.notes
-    onNode(n)
-    for (const sn of extras.sources) {
-      if (cancelled) break
-      onNode(sn)
+  // A few traversal workers drain the priority frontier concurrently; the
+  // request scheduler above keeps the actual network load polite. An idle
+  // worker waits while any other is busy — it may still refill the frontier.
+  let busyWorkers = 0
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      if (cancelled) return
+      const it = popBest()
+      if (!it) {
+        if (busyWorkers === 0) return
+        await new Promise((r) => setTimeout(r, 40))
+        continue
+      }
+      busyWorkers++
+      try {
+        await processItem(it)
+      } catch {
+        /* skip this person on an unexpected error — the tree must survive */
+      } finally {
+        busyWorkers--
+      }
     }
-    processed++
-    status(onStatus, 'processed', { name: `${n.g} ${n.s}`.trim() || fid, count: processed })
   }
+  await Promise.all(Array.from({ length: 6 }, () => worker()))
   status(onStatus, 'ancestors_done')
 
   saveRelSnapshot()
 
-  // Emit edges — ONLY between persons we actually fetched, so a relationship
-  // never invents an empty placeholder.
-  for (const e of allEdges) {
-    if (cancelled) break
-    if (e.t === 'f') {
-      if (fidSet.has(e.a) && fidSet.has(e.b)) onNode(e)
-    } else if (e.t === 'c') {
-      if (!fidSet.has(e.c)) continue
-      const f = e.f && fidSet.has(e.f) ? e.f : null
-      const m = e.m && fidSet.has(e.m) ? e.m : null
-      if (f || m) onNode({ t: 'c', f, m, c: e.c })
-    } else if (e.t === 'gp') {
-      if (fidSet.has(e.c) && fidSet.has(e.p)) onNode(e)
+  // Endgame: emit the remaining edges — still ONLY between persons we actually
+  // fetched, so a relationship never invents an empty placeholder.
+  if (!cancelled) flushEdges(true)
+
+  // Enrichment phase: portraits, photos, notes and sources for every imported
+  // person — AFTER the tree is complete and usable. Runs through the same
+  // scheduler, in the same priority order (root and direct line first), and a
+  // Stop keeps everything imported so far.
+  if (!cancelled) {
+    const order = [...emitted]
+    let enriched = 0
+    const eworker = async (): Promise<void> => {
+      for (;;) {
+        if (cancelled) return
+        const fid = order.shift()
+        if (!fid) return
+        try {
+          const extras = await fetchPersonExtras(fid)
+          const n = nodeByFid.get(fid)
+          if (n && (extras.media.length || extras.notes.length || extras.di.length)) {
+            if (extras.media.length) n.media = extras.media
+            if (extras.notes.length) n.no = extras.notes
+            if (extras.di.length) n.di = extras.di
+            onNode(n)
+          }
+          for (const sn of extras.sources) {
+            if (cancelled) break
+            onNode(sn)
+          }
+        } catch {
+          /* extras are best-effort — never fail the import over them */
+        }
+        enriched++
+        const nn = nodeByFid.get(fid)
+        status(onStatus, 'enriching', {
+          name: nn ? `${nn.g} ${nn.s}`.trim() || fid : fid,
+          count: enriched,
+          total: order.length + enriched
+        })
+      }
     }
+    await Promise.all(Array.from({ length: 4 }, () => eworker()))
   }
 
   // Always anchor the tree on the starting person (the signed-in user's FS
@@ -866,6 +1159,7 @@ export async function syncPersonFromFamilySearch(opts: { fid: string }): Promise
     const extras = await fetchPersonExtras(opts.fid)
     if (extras.media.length) main.media = extras.media
     if (extras.notes.length) main.no = extras.notes
+    if (extras.di.length) main.di = extras.di
     nodes.push(...extras.sources)
   }
   return nodes
@@ -937,7 +1231,31 @@ export async function familySearchPersonDiff(
   if (!gp) return { error: 'FS_NOT_FOUND' }
   const n = personToNode(gp)
   if (!n || n.t !== 'i') return { error: 'FS_NOT_FOUND' }
+  return personFieldDiff(p, n)
+}
 
+/** Two place strings that resolve to the same coordinates in the gazetteer are
+ *  the SAME place — e.g. "Budapest, Hungary" vs the standardized "Budapest,
+ *  Magyarország". The standardization pass stores BOTH variants with identical
+ *  coordinates precisely so this check works offline; without it, every place
+ *  standardization instantly re-flagged all imported people as "changed". */
+function samePlace(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false
+  if (a.trim() === b.trim()) return true
+  const pa = Places.get(a)
+  if (!pa) return false
+  const pb = Places.get(b)
+  if (!pb) return false
+  return Math.abs(pa.lat - pb.lat) < 0.0015 && Math.abs(pa.lon - pb.lon) < 0.0015
+}
+
+const PLACE_FIELDS = new Set(['birthPlace', 'deathPlace', 'christeningPlace', 'burialPlace'])
+
+/** Field-level pull/push diff between a local person and their FS node. */
+function personFieldDiff(
+  p: Person,
+  n: Extract<FsNode, { t: 'i' }>
+): { pull: FsFieldDiff[]; push: FsFieldDiff[] } {
   const rows: [string, string | null, string | null][] = [
     ['givenName', p.givenName || null, n.g || null],
     ['surname', p.surname || null, n.s || null],
@@ -958,6 +1276,9 @@ export async function familySearchPersonDiff(
   const pull: FsFieldDiff[] = []
   const push: FsFieldDiff[] = []
   for (const [field, local, remote] of rows) {
+    // A place written differently but resolving to the same coordinates is NOT
+    // a difference — neither to pull nor to push.
+    if (PLACE_FIELDS.has(field) && samePlace(local, remote)) continue
     if (remote && remote !== local) pull.push({ field, local, remote })
     // Push lists everything the LOCAL side would change on FamilySearch:
     // missing there OR different there.
@@ -1160,12 +1481,25 @@ export interface FsSyncPreview {
 export async function familySearchSyncPreview(
   personId: string
 ): Promise<FsSyncPreview | { error: string }> {
-  const diff = await familySearchPersonDiff(personId)
-  if ('error' in diff) return diff
+  if (!cachedToken) return { error: 'NOT_SIGNED_IN' }
   const p = People.get(personId)
-  if (!p?.fsId) return { error: 'NOT_LINKED' }
+  if (!p) return { error: 'NOT_FOUND' }
+  if (!p.fsId) return { error: 'NOT_LINKED' }
 
-  const [fam, extras] = [await fetchPersonFamilies(p.fsId), await fetchPersonExtras(p.fsId)]
+  // ONE parallel burst per person: record + families + extras together (the
+  // change scan calls this for every linked person — serially this was 3×
+  // slower, and the record used to be fetched twice).
+  const [doc, fam, extras] = await Promise.all([
+    getPersonDoc(p.fsId),
+    fetchPersonFamilies(p.fsId),
+    fetchPersonExtras(p.fsId)
+  ])
+  const gp = doc?.persons?.find((x) => x.id === p.fsId) ?? doc?.persons?.[0]
+  if (!gp) return { error: 'FS_NOT_FOUND' }
+  const node = personToNode(gp)
+  if (!node || node.t !== 'i') return { error: 'FS_NOT_FOUND' }
+  const diff = personFieldDiff(p, node)
+
   const local = localRelativeFsIds(personId)
   // A relative counts as NEW only if it is neither local nor already known from
   // the import snapshot (out-of-scope relatives were known, so not "changes").
@@ -1175,9 +1509,7 @@ export async function familySearchSyncPreview(
   const db = getDb()
   const cnt = (sql: string): number =>
     ((db.prepare(sql).get(personId) as { n: number } | undefined)?.n ?? 0)
-  const doc = await getPersonDoc(p.fsId)
-  const gp = doc?.persons?.find((x) => x.id === p.fsId) ?? doc?.persons?.[0]
-  const remoteOcc = gp?.facts?.filter((f) => f.type === GX + 'Occupation').length ?? 0
+  const remoteOcc = gp.facts?.filter((f) => f.type === GX + 'Occupation').length ?? 0
 
   // NOTE: notes and media are stored differently from a raw count (notes live
   // in the person's `notes` text column, not note_links), so a naive COUNT
@@ -1200,8 +1532,28 @@ export async function familySearchSyncPreview(
 
   const localSrc = cnt("SELECT COUNT(*) AS n FROM citations WHERE owner_type='person' AND owner_id = ?")
   const localOcc = cnt('SELECT COUNT(*) AS n FROM occupations WHERE person_id = ?')
-  const localEv = cnt("SELECT COUNT(*) AS n FROM events WHERE owner_type='person' AND owner_id = ?")
-  const remoteEv = gp ? (personToNode(gp) as { ev?: unknown[] } | null)?.ev?.length ?? 0 : 0
+
+  // Events: count a remote event as MISSING only if importing it would actually
+  // create something — the same routing the importer applies. A Baptism /
+  // Christening fact that already lives in the christening FIELD (that is where
+  // the import puts it) is NOT a change; anything else is matched by the same
+  // fs_key the idempotent import insert uses. Without this, a freshly imported
+  // person with a Baptism fact showed a phantom "events 0 → 1" forever.
+  const evList =
+    (node as { ev?: { type: string; date: string | null; place: string | null; value: string | null }[] }).ev ?? []
+  const hasEvKey = db.prepare(
+    "SELECT 1 FROM events WHERE owner_type='person' AND owner_id = ? AND fs_key = ? LIMIT 1"
+  )
+  const evMissing = evList.filter((e) => {
+    const type = (e.type ?? 'other').trim() || 'other'
+    if (/bapti|christen/i.test(type) && (e.date || e.place)) {
+      if ((e.date && p.christeningDate === e.date) || (!e.date && e.place && p.christeningPlace === e.place)) return false
+      if (!p.christeningDate && !p.christeningPlace) return true
+    }
+    const key = `${type}|${e.date ?? ''}|${e.place ?? ''}|${e.value ?? ''}`
+    return !hasEvKey.get(personId, key)
+  }).length
+  const remoteEv = evList.length
 
   const content: FsContentCounts = {
     // local = remote - missing, so the scan flags ONLY when something is missing.
@@ -1209,7 +1561,7 @@ export async function familySearchSyncPreview(
     media: { local: extras.media.length - mediaMissing, remote: extras.media.length },
     sources: { local: Math.min(localSrc, extras.sources.length), remote: extras.sources.length },
     occupations: { local: Math.min(localOcc, remoteOcc), remote: remoteOcc },
-    events: { local: Math.min(localEv, remoteEv), remote: remoteEv }
+    events: { local: remoteEv - evMissing, remote: remoteEv }
   }
   return { fields: diff.pull, newRelatives, content }
 }
@@ -1229,6 +1581,7 @@ export async function syncPersonRelatives(
   const local = localRelativeFsIds(personId)
   const fresh = fam.relatives.filter((r) => !local.has(r.fid))
   const nodes: FsNode[] = []
+  const pulled = new Set<string>()
   for (const r of fresh) {
     const doc = await getPersonDoc(r.fid)
     const gp = doc?.persons?.find((x) => x.id === r.fid) ?? doc?.persons?.[0]
@@ -1237,9 +1590,31 @@ export async function syncPersonRelatives(
     const extras = await fetchPersonExtras(r.fid)
     if (extras.media.length) n.media = extras.media
     if (extras.notes.length) n.no = extras.notes
+    if (extras.di.length) n.di = extras.di
+    pulled.add(r.fid)
     nodes.push(n, ...extras.sources)
   }
-  nodes.push(...fam.edges)
+  // Edges ONLY between persons that exist — freshly pulled above, or already in
+  // the database. An edge to an out-of-scope person (e.g. the spouse's parents
+  // beyond the imported depth) used to make the ingester create an EMPTY stub:
+  // the person count grew on every manual sync and the data-issue checker
+  // flagged nameless, unconnected people.
+  const resolvable = (f: string | null | undefined): boolean =>
+    !!f && (pulled.has(f) || !!People.findByFsId(f))
+  for (const e of fam.edges) {
+    if (e.t === 'f') {
+      if (resolvable(e.a) && resolvable(e.b)) nodes.push(e)
+    } else if (e.t === 'c') {
+      if (!resolvable(e.c)) continue
+      const f = e.f && resolvable(e.f) ? e.f : null
+      const m = e.m && resolvable(e.m) ? e.m : null
+      if (f || m) nodes.push({ t: 'c', f, m, c: e.c })
+    } else if (e.t === 'gp') {
+      if (resolvable(e.c) && resolvable(e.p)) nodes.push(e)
+    } else {
+      nodes.push(e)
+    }
+  }
   return { added: fresh, nodes }
 }
 
@@ -1254,9 +1629,8 @@ export async function searchFamilySearchPlaces(
   if (!cachedToken) return []
   const q = query.trim()
   if (q.length < 2) return []
-  await throttle()
   try {
-    const res = await fetch(
+    const res = await schedFetch(
       `${API}/platform/places/search?q=${enc(`partialName:${q}`)}&count=8`,
       {
         headers: {
@@ -1311,9 +1685,8 @@ export async function normalizeDateViaFamilySearch(text: string, lang: string): 
   if (!raw) return null
   const key = `${lang}:${raw.toLowerCase()}`
   if (dateCache.has(key)) return dateCache.get(key) ?? null
-  await throttle()
   try {
-    const res = await fetch(`${API}/platform/dates?date=${enc(raw)}`, {
+    const res = await schedFetch(`${API}/platform/dates?date=${enc(raw)}`, {
       headers: {
         Authorization: `Bearer ${cachedToken}`,
         Accept: 'application/json',

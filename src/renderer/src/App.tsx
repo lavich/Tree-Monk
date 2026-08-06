@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MotionConfig, AnimatePresence } from 'framer-motion'
 import { Toaster, toast } from 'sonner'
@@ -35,9 +35,9 @@ import { CommandPalette } from '@/components/CommandPalette'
 import { SupportInviteDialog } from '@/components/common/SupportInviteDialog'
 import { StartModeDialog } from '@/components/common/StartModeDialog'
 import { FamilySearchDialog } from '@/components/settings/FamilySearchDialog'
-import { markReimportNoticeSeen, markStartChoiceSeen, setFsMode, startChoiceSeen } from '@/lib/fsMode'
+import { clearStartChoice, fsArrivedNoticeSeen, isFsMode, markReimportNoticeSeen, markStartChoiceSeen, setFsMode, startChoiceSeen } from '@/lib/fsMode'
+import { isFamilySearchId } from '@/lib/familySearchSearch'
 import { ReimportNoticeDialog } from '@/components/common/ReimportNoticeDialog'
-import { FsAnnounceDialog } from '@/components/common/FsAnnounceDialog'
 import { isDemo } from '@/lib/demo'
 import { PersonPanel } from '@/components/person/PersonPanel'
 import { Preloader } from '@/components/common/Preloader'
@@ -126,7 +126,6 @@ export default function App(): JSX.Element {
   const animations = useSettings((s) => s.animations)
   const { t } = useTranslation() // re-render on language change
   const [supportInviteOpen, setSupportInviteOpen] = useState(false)
-  const [fsAnnounceOpen, setFsAnnounceOpen] = useState(false)
   const [startOpen, setStartOpen] = useState(false)
   const [reimportOpen, setReimportOpen] = useState(false)
   const [fsHubOpen, setFsHubOpen] = useState(false)
@@ -156,46 +155,79 @@ export default function App(): JSX.Element {
   // working in Manual mode — no dialog, no wipe.
   useEffect(() => {
     if (!ready || isDemo()) return
-    const empty = useAppStore.getState().peopleById.size === 0
-    if (empty && !startChoiceSeen()) {
-      setStartOpen(true)
-    } else if (!empty) {
-      // Existing users: default to Manual, mark everything seen, touch nothing.
-      markStartChoiceSeen()
-      markReimportNoticeSeen()
-      setFsMode(false)
-    }
+    void (async () => {
+      // A profile bootstrapped from NOTHING in this very run (fresh install, or
+      // the data folder was wiped/moved) resets the first-launch choices —
+      // otherwise a stale localStorage flag suppressed the start chooser on a
+      // completely empty profile.
+      const fresh = await window.api.workspaces.freshBootstrap?.().catch(() => false)
+      if (fresh) clearStartChoice()
+
+      // Self-heal: the mode is DERIVED FROM THE DATA, not trusted to a fragile
+      // flag — a tree containing FamilySearch-linked people IS a FamilySearch
+      // tree, and a live FS session also implies FS mode. This restores everyone
+      // whose flag was zeroed by the old every-start reset bug. Manual/GEDCOM
+      // trees have neither FS-linked people nor a session, so they're safe.
+      const empty = useAppStore.getState().peopleById.size === 0
+      if (!isFsMode() && !empty) {
+        const anyFsPerson = [...useAppStore.getState().peopleById.values()].some((p) =>
+          isFamilySearchId(p.fsId)
+        )
+        if (anyFsPerson) {
+          markStartChoiceSeen()
+          setFsMode(true)
+        } else {
+          void window.api.familysearch.signedIn?.().then((si) => {
+            if (si && !isFsMode()) {
+              markStartChoiceSeen()
+              setFsMode(true)
+            }
+          })
+        }
+      }
+      if (empty && !startChoiceSeen()) {
+        setStartOpen(true)
+      } else if (!empty && !startChoiceSeen()) {
+        // Existing users updating from a pre-chooser version (data present but
+        // the choice never made): default them to Manual ONCE and never nag. It
+        // must NOT run when a choice exists — it used to reset a chosen FS mode
+        // on every restart, making all FamilySearch features vanish.
+        markStartChoiceSeen()
+        markReimportNoticeSeen()
+        setFsMode(false)
+      }
+    })()
   }, [ready])
 
-  // One-time notice that the new FamilySearch API connection is in development —
-  // shown once shortly after launch, BEFORE the support invitation.
+  // The 1.8.17 "FamilySearch needs a NEW family tree" notice. Deliberately
+  // UNCONDITIONAL: shown exactly once per installation on the next start, no
+  // matter which tree is open, which mode it is in, or whether the build has an
+  // AppKey. Its earlier data-dependent gating meant an empty tree never saw it.
   useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-    if (isDemo()) return
-    void window.api.fsAnnounce
-      ?.status()
-      .then((seen) => {
-        if (cancelled || seen) return
-        timer = setTimeout(() => !cancelled && setFsAnnounceOpen(true), 900)
-      })
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-    }
-  }, [])
+    if (!ready || isDemo()) return
+    if (fsArrivedNoticeSeen()) return
+    setReimportOpen(true)
+  }, [ready])
 
-  // One-time, no-pressure support invitation — shown shortly after launch, but
-  // only once the FamilySearch notice above has been seen (so it comes second).
+  // The "FamilySearch connection is in development" notice is GONE: the
+  // integration shipped, so announcing it as upcoming would be wrong. The
+  // fsAnnounce IPC + seen-flag stay in place so existing installs (which may
+  // have the flag set) keep working and the support invitation still sequences
+  // correctly below.
+
+  // One-time, no-pressure support invitation — shown shortly after launch.
   // Once seen (closed any way), NEVER again (flag stored in the DB).
   useEffect(() => {
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     if (isDemo()) return
-    void Promise.all([window.api.supportInvite?.status(), window.api.fsAnnounce?.status()])
-      .then(([seen, fsSeen]) => {
-        if (cancelled || seen || !fsSeen) return
+    // No longer gated on the (removed) FamilySearch announcement having been
+    // seen — that flag is never set on new installs now, which would have
+    // suppressed this invitation forever.
+    void window.api.supportInvite
+      ?.status()
+      .then((seen) => {
+        if (cancelled || seen) return
         timer = setTimeout(() => !cancelled && setSupportInviteOpen(true), 1500)
       })
       .catch(() => undefined)
@@ -247,9 +279,16 @@ export default function App(): JSX.Element {
 
   // If a FamilySearch import was interrupted (app killed mid-run), tell the user
   // on launch and offer a one-click cleanup of the empty entities it left.
+  // Fires ONCE per app run: the deps re-run this effect on a language switch,
+  // and the pending flag is legitimately set while an import is RUNNING — both
+  // used to pop a bogus "import was interrupted" toast mid-import.
+  const pendingChecked = useRef(false)
   useEffect(() => {
+    if (pendingChecked.current) return
+    pendingChecked.current = true
     void window.api.familysearch.pending?.().then((pending) => {
       if (!pending) return
+      if (useAppStore.getState().fsImport?.running) return
       toast.warning(t('fs.interrupted'), {
         duration: 12000,
         action: {
@@ -283,9 +322,10 @@ export default function App(): JSX.Element {
         <PluginInstallDialog />
         <CommandPalette />
         <SupportInviteDialog open={supportInviteOpen} onOpenChange={setSupportInviteOpen} />
-        <FsAnnounceDialog open={fsAnnounceOpen} onOpenChange={setFsAnnounceOpen} />
-        <StartModeDialog open={startOpen} onOpenChange={setStartOpen} onChooseFs={() => setFsHubOpen(true)} />
-        <ReimportNoticeDialog open={reimportOpen} onOpenChange={setReimportOpen} onChooseFs={() => setFsHubOpen(true)} />
+          {/* The notice always wins the first slot — the chooser follows once it is
+          dismissed, so a fresh install never gets two stacked modals. */}
+      <StartModeDialog open={startOpen && !reimportOpen} onOpenChange={setStartOpen} onChooseFs={() => setFsHubOpen(true)} />
+        <ReimportNoticeDialog open={reimportOpen} onOpenChange={setReimportOpen} />
         <FamilySearchDialog open={fsHubOpen} onOpenChange={setFsHubOpen} mandatory />
         <Toaster theme={theme} position="bottom-right" richColors />
       </div>

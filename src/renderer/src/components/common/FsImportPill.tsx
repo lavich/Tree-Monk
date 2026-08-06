@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
-import { CheckCircle2, Loader2, Maximize2, TreeDeciduous, X } from 'lucide-react'
+import { CheckCircle2, Loader2, Maximize2, Square, TreeDeciduous, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store/useAppStore'
@@ -19,6 +20,13 @@ export function FsImportPill(): JSX.Element | null {
   const expanded = useAppStore((s) => s.fsImportExpanded)
   const setExpanded = useAppStore((s) => s.setFsImportExpanded)
   const collapsed = useSettings((s) => s.sidebarCollapsed)
+  const [stopping, setStopping] = useState(false)
+  const stop = (): void => {
+    setStopping(true)
+    void window.api.familysearch.cancel()
+  }
+  const runningLabel = (phase: string): string =>
+    phase === 'auth' ? t('fs.phaseAuth') : phase === 'enriching' ? t('fsImport.enriching') : t('fsImport.growing')
 
   // Right of the sidebar: w-16 (4rem) collapsed, w-56 (14rem) expanded.
   const left = collapsed ? '4.75rem' : '15rem'
@@ -59,9 +67,7 @@ export function FsImportPill(): JSX.Element | null {
               <div className="flex min-w-0 flex-col items-start leading-tight">
                 <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                   {imp.running
-                    ? imp.phase === 'auth'
-                      ? t('fs.phaseAuth')
-                      : t('fsImport.growing')
+                    ? runningLabel(imp.phase)
                     : imp.phase === 'error'
                       ? t('fs.importFailed')
                       : t('fsImport.done', { people: imp.people, families: imp.families })}
@@ -78,10 +84,20 @@ export function FsImportPill(): JSX.Element | null {
             </button>
 
             {imp.running ? (
-              <Maximize2
-                className="h-4 w-4 shrink-0 cursor-pointer text-emerald-600/70 hover:text-emerald-600"
-                onClick={() => setExpanded(true)}
-              />
+              <span className="flex shrink-0 items-center gap-1.5">
+                <button
+                  onClick={stop}
+                  disabled={stopping}
+                  title={t('fsImport.stop')}
+                  className="rounded-md p-1 text-rose-500/80 hover:bg-rose-500/10 hover:text-rose-500 disabled:opacity-40"
+                >
+                  <Square className="h-3.5 w-3.5 fill-current" />
+                </button>
+                <Maximize2
+                  className="h-4 w-4 cursor-pointer text-emerald-600/70 hover:text-emerald-600"
+                  onClick={() => setExpanded(true)}
+                />
+              </span>
             ) : (
               <button
                 onClick={clear}
@@ -108,9 +124,7 @@ export function FsImportPill(): JSX.Element | null {
               {imp.running ? (
                 <>
                   <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
-                  <p className="text-center text-sm font-medium">
-                    {imp.phase === 'auth' ? t('fs.phaseAuth') : t('fsImport.growing')}
-                  </p>
+                  <p className="text-center text-sm font-medium">{runningLabel(imp.phase)}</p>
                   {imp.name && (
                     <p className="text-center text-xs text-muted-foreground">
                       {t('fs.importingCount', { name: imp.name, count: imp.count })}
@@ -126,6 +140,12 @@ export function FsImportPill(): JSX.Element | null {
                 </>
               )}
               <div className="flex gap-2">
+                {imp.running && (
+                  <Button variant="destructive" onClick={stop} disabled={stopping} className="gap-1.5">
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                    {t('fsImport.stop')}
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => setExpanded(false)}>
                   {t('fsImport.minimize')}
                 </Button>

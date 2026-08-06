@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TreeDeciduous } from 'lucide-react'
+import { FsTreeIcon } from '@/components/common/FsBrand'
 import { isFsMode } from '@/lib/fsMode'
 
 /**
@@ -42,7 +42,9 @@ export function FamilySearchStatusBadge(): JSX.Element | null {
       title={t('fs.connected')}
       className="flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400"
     >
-      <TreeDeciduous className="h-3.5 w-3.5" />
+      {/* Official mosaic-tree icon, kept whole at 16x16 - the brand guide allows
+          the tree icon exactly for FamilySearch API / authentication state. */}
+      <FsTreeIcon size={16} />
       <span className="hidden sm:inline">FamilySearch</span>
     </span>
   )

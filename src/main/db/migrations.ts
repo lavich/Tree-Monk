@@ -228,4 +228,20 @@ export function applyMigrations(database: Database.Database): void {
   } catch {
     /* events/occupations/settings not ready yet */
   }
+
+  // One-time cleanup: EXACT duplicate citations (same source, owner, event tag,
+  // page and note) — earlier FamilySearch re-imports could file the same
+  // source citation repeatedly because the dedupe was in-memory only. Keeps
+  // the first copy of each; genuinely different citations are never touched.
+  try {
+    database.exec(`
+      DELETE FROM citations WHERE rowid NOT IN (
+        SELECT MIN(rowid) FROM citations
+        GROUP BY coalesce(source_id,''), owner_type, owner_id,
+                 coalesce(event_tag,''), coalesce(page,''), coalesce(note,'')
+      )
+    `)
+  } catch {
+    /* citations not ready yet */
+  }
 }

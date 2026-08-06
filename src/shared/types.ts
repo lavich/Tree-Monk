@@ -9,6 +9,9 @@ export interface Workspace {
   file: string
   color: string
   createdAt: string
+  /** What the tree is: FamilySearch-linked or manual/GEDCOM. Detected from the
+   *  database (any person with an FS id) and kept up to date by the importers. */
+  kind?: 'fs' | 'manual'
 }
 
 export interface Person {
@@ -291,6 +294,7 @@ export interface FamilySearchStatus {
     | 'processed'
     | 'ancestors'
     | 'ancestors_done'
+    | 'enriching'
     | 'side_branches'
     | 'downloading_children'
     | 'writing_gedcom'

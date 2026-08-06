@@ -97,6 +97,15 @@ function sexOf(p: GxPerson): 'M' | 'F' | 'U' {
 /** A fact's date: prefer the human-readable original, else the formal value. */
 const factDate = (f?: GxFact): string | null => f?.date?.original ?? f?.date?.formal?.replace(/^\+/, '') ?? null
 const factPlace = (f?: GxFact): string | null => f?.place?.original ?? null
+/** A fact's reason statement (FamilySearch stores it as the attribution change
+ *  message) — MINUS our own write boilerplate ("Contributed/Updated via
+ *  TreeMonk"), which is provenance, not research data, and used to round-trip
+ *  into the local per-fact notes after every push. */
+const factReason = (f?: { attribution?: { changeMessage?: string } }): string | null => {
+  const msg = f?.attribution?.changeMessage ?? null
+  if (!msg) return null
+  return /\bvia TreeMonk\b/i.test(msg) ? null : msg
+}
 const findFact = (p: GxPerson, suffix: string): GxFact | undefined =>
   p.facts?.find((f) => f.type === GX + suffix)
 
@@ -143,12 +152,26 @@ export function personToNode(p: GxPerson): FsNode | null {
     .map((f) => ({ title: (f.value ?? '').trim(), date: factDate(f), place: factPlace(f) }))
     .filter((o) => o.title)
 
-  // Any other non-vital fact → a generic life event.
+  // Any other non-vital fact → a generic life event. Custom FS fact types come
+  // as data URIs ("data:,Baptism", possibly percent-encoded) — strip that down
+  // to the bare label so the stored/displayed type is just "Baptism".
   const VITAL = new Set(['Birth', 'Death', 'Christening', 'Burial', 'Occupation', 'Religion'].map((x) => GX + x))
+  const cleanFactType = (t: string): string => {
+    let s = t.replace(GX, '').replace(/^.*[/#]/, '')
+    if (s.startsWith('data:,')) {
+      s = s.slice('data:,'.length)
+      try {
+        s = decodeURIComponent(s)
+      } catch {
+        /* keep the raw label */
+      }
+    }
+    return s.trim() || 'other'
+  }
   const ev = (p.facts ?? [])
     .filter((f) => f.type && !VITAL.has(f.type))
     .map((f) => ({
-      type: (f.type ?? '').replace(GX, '').replace(/^.*[/#]/, '') || 'other',
+      type: cleanFactType(f.type ?? ''),
       date: factDate(f),
       place: factPlace(f),
       value: f.value ?? null
@@ -170,10 +193,10 @@ export function personToNode(p: GxPerson): FsNode | null {
     bud: factDate(burial),
     bup: factPlace(burial),
     re: religion?.value ?? null,
-    bn: birth?.attribution?.changeMessage ?? null,
-    dn: death?.attribution?.changeMessage ?? null,
-    cn: chr?.attribution?.changeMessage ?? null,
-    un: burial?.attribution?.changeMessage ?? null,
+    bn: factReason(birth),
+    dn: factReason(death),
+    cn: factReason(chr),
+    un: factReason(burial),
     alt: alt.length ? alt : undefined,
     oc: oc.length ? oc : undefined,
     ev: ev.length ? ev : undefined

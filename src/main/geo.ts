@@ -92,24 +92,28 @@ export async function geoSearch(query: string): Promise<GeoResult[]> {
   const cached = geoCache.get(key)
   if (cached) return cached
 
-  // Chain requests so only ONE hits Nominatim at a time, each ≥1.1s apart.
+  // FS mode: the FamilySearch Places authority is the primary source — the
+  // same canonical names the FamilySearch tree uses. This runs OUTSIDE the
+  // serial Nominatim chain: the FS request scheduler already runs several
+  // polite requests in parallel, so bulk geocoding/standardization is fast
+  // while signed in. The public geocoder is only the fallback (signed out,
+  // or the authority has no match).
+  if (isSignedIn()) {
+    try {
+      const fs = await searchFamilySearchPlaces(q)
+      if (fs.length) {
+        geoCache.set(key, fs)
+        return fs
+      }
+    } catch {
+      /* fall through to Nominatim */
+    }
+  }
+
+  // Chain the rest so only ONE request hits Nominatim at a time, ≥1.1s apart.
   const run = geoChain.then(async () => {
     const again = geoCache.get(key)
     if (again) return again
-    // FS mode: the FamilySearch Places authority is the primary source — the
-    // same canonical names the FamilySearch tree uses. Public geocoder is only
-    // the fallback (signed out, or the authority has no match).
-    if (isSignedIn()) {
-      try {
-        const fs = await searchFamilySearchPlaces(q)
-        if (fs.length) {
-          geoCache.set(key, fs)
-          return fs
-        }
-      } catch {
-        /* fall through to Nominatim */
-      }
-    }
     const qs = `search?format=jsonv2&limit=6&addressdetails=1&q=${encodeURIComponent(q)}`
     const headers = { 'User-Agent': NOMINATIM_UA, 'Accept-Language': placeLang() }
     const finish = (data: NominatimHit[]): GeoResult[] => {
@@ -170,6 +174,63 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  * the person's exact place text) appear. Rate-limited to ~1 req/s per
  * Nominatim's usage policy. Idempotent & resumable (already-geocoded skipped).
  */
+// ---- Incremental geocoding (runs DURING an import) --------------------------
+// The bulk pass below can only start once everything has been written, so on a
+// large FamilySearch import the map stayed empty until the very end. This queue
+// takes place names AS THEY STREAM IN and resolves them in the background, so
+// coordinates land while the tree is still arriving. It shares geoSearch (hence
+// the same cache, the FamilySearch Places authority while signed in, and the
+// same Nominatim throttle), so it can never outrun the polite request limits.
+const incomingQueue: string[] = []
+const incomingSeen = new Set<string>()
+let incomingActive = 0
+/** Deliberately small: the import itself is competing for the same scheduler. */
+const INCREMENTAL_CONCURRENCY = 2
+
+function pumpIncoming(): void {
+  while (incomingActive < INCREMENTAL_CONCURRENCY && incomingQueue.length) {
+    const name = incomingQueue.shift()
+    if (!name) continue
+    incomingActive++
+    void (async () => {
+      try {
+        // Someone else may have resolved it since it was queued.
+        const known = Places.get(name)
+        if (!known || known.lat === null || known.lon === null) {
+          const results = await geoSearch(name)
+          if (results[0]) Places.upsert(name, results[0].lat, results[0].lon)
+        }
+      } catch {
+        /* best-effort: the bulk pass at the end retries whatever is missing */
+      } finally {
+        incomingActive--
+        pumpIncoming()
+      }
+    })()
+  }
+}
+
+/**
+ * Queue place names for background geocoding while an import is running.
+ * Safe to call for every streamed person: names are de-duplicated for the whole
+ * session and already-geocoded places are skipped.
+ */
+export function queueGeocode(names: (string | null | undefined)[]): void {
+  for (const raw of names) {
+    const t = (raw ?? '').trim()
+    if (t.length < 3 || incomingSeen.has(t)) continue
+    incomingSeen.add(t)
+    incomingQueue.push(t)
+  }
+  pumpIncoming()
+}
+
+/** Resolves once the incremental queue has drained (used before the bulk pass
+ *  so the two never geocode the same name twice). */
+export async function waitForIncomingGeocode(): Promise<void> {
+  while (incomingQueue.length || incomingActive > 0) await sleep(150)
+}
+
 export async function geocodePlaces(
   onProgress: (p: GeocodeProgress) => void
 ): Promise<{ total: number; geocoded: number }> {
@@ -288,8 +349,14 @@ export async function standardizePlaces(
 
   // 3. Persist canonical coordinates and rewrite the place text everywhere it
   //    differs. Only rows that actually change are written (keeps the audit log
-  //    and work minimal).
-  for (const r of canon.values()) savePlace(r)
+  //    and work minimal). The ORIGINAL variant is stored too, with the same
+  //    coordinates — so both spellings resolve in the gazetteer, and the
+  //    FamilySearch change scan can recognise "Budapest, Hungary" and
+  //    "Budapest, Magyarország" as the SAME place instead of flagging a change.
+  for (const [orig, r] of canon) {
+    savePlace(r)
+    if (r.name !== orig) Places.upsert(orig, r.lat, r.lon)
+  }
   const mapTo = (s: string | null): string | null => {
     const t = (s ?? '').trim()
     const r = t ? canon.get(t) : undefined

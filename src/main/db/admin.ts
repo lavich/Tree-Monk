@@ -1,5 +1,6 @@
 import { existsSync, unlinkSync } from 'fs'
 import { getDb, mediaDir } from './connection'
+import { People } from './repo'
 
 // EVERY data table the wipe must clear. The full reset has to leave nothing
 // behind — not just people/families, but also their facts, the boards, the
@@ -47,6 +48,35 @@ const TABLES = [
  * ancestry), so people who connect generations are never severed. Also drops
  * families left completely empty. Returns how many people were removed.
  */
+/**
+ * Post-import cleanup: remove persons CREATED by this import run that ended up
+ * connected to nobody — no family membership (as parent or child) and no
+ * godparent link in either direction. These are artifacts of the person cap /
+ * side-branch cutoff (their only relative fell outside the imported scope), and
+ * they show up as "not connected to anyone" data issues. Never touches
+ * pre-existing people or the (kept) root person.
+ */
+export function removeDisconnectedImports(newFids: string[], keepPersonId: string | null): number {
+  if (!newFids.length) return 0
+  const db = getDb()
+  const connected = db.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM families WHERE husband_id = @id OR wife_id = @id) +
+       (SELECT COUNT(*) FROM family_children WHERE child_id = @id) +
+       (SELECT COUNT(*) FROM godparents WHERE person_id = @id OR godparent_id = @id) AS n`
+  )
+  let removed = 0
+  for (const fid of newFids) {
+    const row = db.prepare('SELECT id FROM people WHERE fs_id = ?').get(fid) as { id: string } | undefined
+    if (!row || row.id === keepPersonId) continue
+    const links = (connected.get({ id: row.id }) as { n: number }).n
+    if (links > 0) continue
+    People.remove(row.id)
+    removed++
+  }
+  return removed
+}
+
 export function removeNamelessStubs(): number {
   const db = getDb()
   const res = db

@@ -288,6 +288,7 @@ const api: TreeMonkApi = {
   workspaces: {
     list: () => ipcRenderer.invoke(Channels.workspaces.list),
     active: () => ipcRenderer.invoke(Channels.workspaces.active),
+    freshBootstrap: () => ipcRenderer.invoke(Channels.workspaces.freshBootstrap),
     create: (name) => ipcRenderer.invoke(Channels.workspaces.create, name),
     switch: (id) => ipcRenderer.invoke(Channels.workspaces.switch, id),
     rename: (id, name) => ipcRenderer.invoke(Channels.workspaces.rename, id, name),

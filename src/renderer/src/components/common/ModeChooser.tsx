@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Check, FileText, TreeDeciduous } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -9,38 +9,52 @@ import { cn } from '@/lib/utils'
  * notice: pick FamilySearch or Manual/GEDCOM, then CONFIRM after reading a
  * detailed, localized description of exactly what the mode means (including
  * the restrictions — the modes are strictly separated).
+ *
+ * The FamilySearch card is live only in builds that carry an AppKey
+ * (familysearch.configured) — keyless builds keep the "coming soon" state so
+ * the choice never leads to a dead end.
  */
 export function ModeChooser({ onDone }: { onDone: (fs: boolean) => void }): JSX.Element {
   const { t } = useTranslation()
   const [picked, setPicked] = useState<'fs' | 'manual' | null>(null)
+  const [fsAvailable, setFsAvailable] = useState(false)
+  useEffect(() => {
+    let alive = true
+    window.api.familysearch
+      .configured()
+      .then((v) => {
+        if (alive) setFsAvailable(!!v)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   if (picked === null) {
+    // The FamilySearch integration has shipped, so there is no "coming soon"
+    // state any more: with an AppKey the card is a normal choice, and a build
+    // WITHOUT a key simply omits it rather than advertising something that
+    // cannot be used.
+    const cards = [
+      ...(fsAvailable
+        ? [{ key: 'fs' as const, Icon: TreeDeciduous, title: t('start.fsTitle'), desc: t('start.fsDesc'), accent: true }]
+        : []),
+      { key: 'manual' as const, Icon: FileText, title: t('start.manualTitle'), desc: t('start.manualDesc'), accent: false }
+    ]
     return (
-      <div className="grid gap-3 sm:grid-cols-2">
-        {(
-          [
-            { key: 'fs' as const, Icon: TreeDeciduous, title: t('start.fsTitle'), desc: t('start.fsDesc'), accent: true },
-            { key: 'manual' as const, Icon: FileText, title: t('start.manualTitle'), desc: t('start.manualDesc'), accent: false }
-          ]
-        ).map(({ key, Icon, title, desc, accent }) => (
+      <div className={cn('grid gap-3', cards.length > 1 && 'sm:grid-cols-2')}>
+        {cards.map(({ key, Icon, title, desc, accent }) => (
           <button
             key={key}
-            disabled={key === 'fs'}
-            onClick={() => key !== 'fs' && setPicked(key)}
+            onClick={() => setPicked(key)}
             className={cn(
               'relative flex h-full min-h-[170px] flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all',
-              key === 'fs'
-                ? 'cursor-not-allowed border-border bg-muted/20 opacity-60'
-                : accent
-                  ? 'border-emerald-500/40 bg-emerald-500/5 hover:-translate-y-0.5 hover:bg-emerald-500/10 hover:shadow-lg'
-                  : 'border-border bg-muted/30 hover:-translate-y-0.5 hover:bg-muted/60 hover:shadow-lg'
+              accent
+                ? 'border-emerald-500/40 bg-emerald-500/5 hover:-translate-y-0.5 hover:bg-emerald-500/10 hover:shadow-lg'
+                : 'border-border bg-muted/30 hover:-translate-y-0.5 hover:bg-muted/60 hover:shadow-lg'
             )}
           >
-            {key === 'fs' && (
-              <span className="absolute right-3 top-3 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
-                {t('start.comingSoon')}
-              </span>
-            )}
             <span
               className={cn(
                 'flex h-10 w-10 items-center justify-center rounded-lg',
@@ -50,9 +64,7 @@ export function ModeChooser({ onDone }: { onDone: (fs: boolean) => void }): JSX.
               <Icon className="h-5 w-5" />
             </span>
             <span className="text-sm font-semibold leading-tight">{title}</span>
-            <span className="text-xs leading-relaxed text-muted-foreground">
-              {key === 'fs' ? t('start.fsComingDesc') : desc}
-            </span>
+            <span className="text-xs leading-relaxed text-muted-foreground">{desc}</span>
           </button>
         ))}
       </div>

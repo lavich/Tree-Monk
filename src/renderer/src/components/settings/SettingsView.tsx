@@ -9,6 +9,7 @@ import {
   Download,
   FileUp,
   Globe,
+  Info,
   ListOrdered,
   LifeBuoy,
   Plug,
@@ -22,17 +23,22 @@ import {
   Settings2,
   Sparkles,
   Trash2,
+  TreeDeciduous,
   Type,
   Upload,
+  LogIn,
+  LogOut,
   type LucideIcon
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
+import { FsSolutionBadge, FsTrademarkNotice } from '@/components/common/FsBrand'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { ExportGedcomDialog } from '@/components/common/ExportGedcomDialog'
 import { useFsMode } from '@/hooks/useFsMode'
+import { setFsMode } from '@/lib/fsMode'
 import { runPlaceStandardization } from '@/lib/standardizePlaces'
 import { importGedcomWithToast } from '@/lib/importGedcom'
 import { useAppStore } from '@/store/useAppStore'
@@ -101,6 +107,54 @@ function Category({
   )
 }
 
+/**
+ * About / credits. This is the app's credit-notice section, which is where the
+ * FamilySearch Solutions Program brand guide requires the trademark ownership
+ * notice to live — and the guide-appropriate home for our Solutions Program
+ * tier logo. The FamilySearch part renders only when an AppKey is actually
+ * configured, so a keyless build shows no FamilySearch branding at all. Our own
+ * product name stays the more prominent mark, as the guide requires.
+ */
+function AboutBlock(): JSX.Element {
+  const { t } = useTranslation()
+  const [version, setVersion] = useState('')
+  const [fsOn, setFsOn] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void window.api.updates
+      .version()
+      .then((v) => {
+        if (alive) setVersion(v)
+      })
+      .catch(() => undefined)
+    void window.api.familysearch
+      .configured()
+      .then((ok) => {
+        if (alive) setFsOn(ok)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  return (
+    <Category icon={BadgeCheck} title={t('about.title')}>
+      <Row icon={Info} title="TreeMonk" desc={t('about.copyright')}>
+        <span className="text-xs tabular-nums text-muted-foreground">{version}</span>
+      </Row>
+      {fsOn && (
+        <div className="space-y-3 px-4 py-4">
+          <p className="text-xs leading-relaxed text-muted-foreground">{t('about.fsCredit')}</p>
+          <FsSolutionBadge height={44} />
+          <FsTrademarkNotice />
+        </div>
+      )}
+    </Category>
+  )
+}
+
 /** One setting row: icon + title + description on the left, control on the right. */
 function Row({
   icon: Icon,
@@ -151,6 +205,35 @@ export function SettingsView(): JSX.Element {
   const [interrupted, setInterrupted] = useState(false)
   const fsMode = useFsMode()
   const [standardizing, setStandardizing] = useState(false)
+  // FamilySearch account state — the sign-in/out row in the Data section.
+  const [fsSignedIn, setFsSignedIn] = useState<boolean | null>(null)
+  const [fsBusy, setFsBusy] = useState(false)
+  useEffect(() => {
+    void window.api.familysearch
+      .signedIn()
+      .then(setFsSignedIn)
+      .catch(() => setFsSignedIn(false))
+  }, [])
+  const fsLogin = async (): Promise<void> => {
+    setFsBusy(true)
+    try {
+      const r = await window.api.familysearch.login(i18n.language)
+      if (r.ok) {
+        setFsSignedIn(true)
+        setFsMode(true)
+        toast.success(t('fs.loginOk'))
+      } else {
+        toast.error(t('fs.loginFailed'))
+      }
+    } finally {
+      setFsBusy(false)
+    }
+  }
+  const fsLogout = async (): Promise<void> => {
+    await window.api.familysearch.signOut()
+    setFsSignedIn(false)
+    toast.success(t('fs.signedOutToast'))
+  }
   const [section, setSection] = useState<SectionId>('appearance')
 
   // Surface an import that was interrupted (app killed mid-run) so the user can
@@ -291,6 +374,29 @@ export function SettingsView(): JSX.Element {
 
             {section === 'data' && (
               <Category icon={Database} title={t('settings.sectionData')}>
+                <Row
+                  icon={TreeDeciduous}
+                  title="FamilySearch"
+                  desc={
+                    fsSignedIn === null
+                      ? '…'
+                      : fsSignedIn
+                        ? t('settings.fsSignedInDesc')
+                        : t('settings.fsSignedOutDesc')
+                  }
+                >
+                  {fsSignedIn ? (
+                    <Button size="sm" variant="outline" className="gap-2" onClick={() => void fsLogout()}>
+                      <LogOut className="h-4 w-4" />
+                      {t('fs.signOut')}
+                    </Button>
+                  ) : (
+                    <Button size="sm" className="gap-2" disabled={fsBusy} onClick={() => void fsLogin()}>
+                      <LogIn className="h-4 w-4" />
+                      {fsBusy ? t('fs.signingIn') : t('fs.signInNow')}
+                    </Button>
+                  )}
+                </Row>
                 <Row icon={MapPin} title={t('places.standardizeTitle')} desc={t('places.standardizeDesc')}>
                   <Button size="sm" variant="outline" className="gap-2" disabled={standardizing} onClick={standardize}>
                     <MapPin className="h-4 w-4" />
@@ -393,6 +499,7 @@ export function SettingsView(): JSX.Element {
             )}
 
             {section === 'help' && (
+              <>
               <Category icon={LifeBuoy} title={t('settings.sectionHelp')}>
                 <Row icon={BookOpen} title={t('help.openManual')} desc={t('settings.manualDesc')}>
                   <Button size="sm" variant="outline" className="gap-2" onClick={() => void window.api.app.openManual()}>
@@ -411,6 +518,8 @@ export function SettingsView(): JSX.Element {
                   </Button>
                 </Row>
               </Category>
+              <AboutBlock />
+              </>
             )}
 
             {section === 'danger' && (

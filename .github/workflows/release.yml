@@ -54,10 +54,21 @@ jobs:
 
       # dist:win / dist:linux already fetch the bundled assets, build the app and
       # run electron-builder; the trailing args turn on GitHub publishing.
+      #
+      # The FamilySearch AppKey is baked in at build time (electron-vite inlines
+      # import.meta.env.MAIN_VITE_*). It is a PKCE public client id, not a secret,
+      # but it is kept in a repository secret so it never sits in git. When the
+      # secret is absent the value is empty and the whole FamilySearch integration
+      # stays dormant — isFamilySearchConfigured() is false and no FamilySearch UI
+      # appears. The public build is READ-ONLY towards FamilySearch: it imports and
+      # syncs FROM the tree and never writes back.
       - name: Build and publish
         run: npm run ${{ matrix.script }} -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAIN_VITE_FS_CLIENT_ID: ${{ secrets.FS_CLIENT_ID }}
+          MAIN_VITE_FS_ENV: production
+          MAIN_VITE_FS_REDIRECT_URI: http://127.0.0.1:4321/auth/callback
 
   # Build the LOCAL web app (treemonk.eu/demo): the full TreeMonk running in the
   # browser, with the database persisted in the visitor's OWN browser storage

@@ -33,7 +33,7 @@ import { exportTreeImage, exportHtmlPdf } from './treeExport'
 import { registerRegionsIpc } from './regionsIpc'
 import { buildMapMarkers } from './db/mapData'
 import { buildAtlasPoints } from './db/atlasData'
-import { getApiConfig, getApiStatus, regenerateApiToken, restartApiServer, setApiConfig } from './api/server'
+import { getApiConfig, getApiStatus, notifyDataChanged, regenerateApiToken, restartApiServer, setApiConfig } from './api/server'
 import { installPluginZip, listPlugins, pluginPanelInfo, removePlugin, setPluginEnabled } from './plugins'
 import { eventsNear as wikiEventsNear } from './wiki'
 import { runSanityCheck } from './db/sanity'
@@ -60,6 +60,7 @@ import {
 import {
   FsIngester,
   applyFsAliases,
+  applyFsCollaborations,
   applyFsEvents,
   applyFsMedia,
   applyFsNotes,
@@ -67,7 +68,7 @@ import {
   applyFsSources,
   applyFsGodparents
 } from './db/fsIngest'
-import { removeEmptyPeople, removeNamelessStubs, wipeDatabase } from './db/admin'
+import { removeDisconnectedImports, removeEmptyPeople, removeNamelessStubs, wipeDatabase } from './db/admin'
 import { closeDb } from './db/connection'
 import { Audit } from './db/audit'
 import { scanDuplicates, mergePeople, dismissMerge } from './db/duplicates'
@@ -82,11 +83,13 @@ import {
   activeWorkspace,
   createWorkspace,
   listWorkspaces,
+  markActiveWorkspaceKind,
   removeWorkspace,
   renameWorkspace,
-  setActiveWorkspace
+  setActiveWorkspace,
+  wasFreshBootstrap
 } from './workspaces'
-import { geoSearch, geocodePlaces, savePlace, standardizePlaces } from './geo'
+import { geoSearch, geocodePlaces, queueGeocode, savePlace, standardizePlaces, waitForIncomingGeocode } from './geo'
 import { checkForUpdates, currentVersion, listReleases, openUpdateDownload } from './updates'
 import type { ChildRelation, FamilySearchImportOptions } from '@shared/types'
 import {
@@ -436,11 +439,13 @@ export function registerIpc(): void {
       filters: [{ name: 'GEDCOM', extensions: ['ged', 'gedcom'] }]
     })
     if (res.canceled || !res.filePaths[0]) return null
+    markActiveWorkspaceKind('manual')
     return Audit.pause(() => importGedcomFile(res.filePaths[0]))
   })
-  ipcMain.handle(Channels.gedcom.importContent, (_e, text: string) =>
-    Audit.pause(() => importGedcomText(text))
-  )
+  ipcMain.handle(Channels.gedcom.importContent, (_e, text: string) => {
+    markActiveWorkspaceKind('manual')
+    return Audit.pause(() => importGedcomText(text))
+  })
 
   // FamilySearch streaming importer → live SQLite ingest
   ipcMain.handle(Channels.familysearch.import, async (e, options: FamilySearchImportOptions) => {
@@ -460,6 +465,9 @@ export function registerIpc(): void {
     // launch can detect the interruption and offer the cleanup. Cleared once the
     // import finishes (or is stopped) and the stubs have been cleaned up.
     AppSettings.set('fs_import_pending', '1')
+    // This tree is now a FamilySearch tree — the workspace list shows it, and
+    // the FS features gate on it.
+    markActiveWorkspaceKind('fs')
     // Suppress the audit log during the streamed import (restored in `finally`).
     Audit.setEnabled(false)
     const ingester = new FsIngester()
@@ -474,6 +482,21 @@ export function registerIpc(): void {
         (node) => {
           const event = ingester.ingest(node)
           if (event) safeSend(e.sender, Channels.familysearch.nodeAdded, event)
+          // Geocode the places of THIS person right away, in the background, so
+          // the map fills while the tree is still streaming in instead of only
+          // after the whole import has finished. The queue de-duplicates and
+          // shares the same request scheduler, so it cannot outrun the limits.
+          if (node.t === 'i') {
+            queueGeocode([
+              node.bp,
+              node.dp,
+              node.cp,
+              node.bup,
+              ...(node.ev ?? []).map((ev) => ev.place)
+            ])
+          } else if (node.t === 'f') {
+            queueGeocode([node.mp])
+          }
           // Apply the root AS SOON AS the starting person streams in, so the
           // tree can grow live from the first refresh. With an explicit root we
           // wait for that fid; otherwise (importing your own tree) the FIRST
@@ -508,12 +531,35 @@ export function registerIpc(): void {
       // Always drop nameless married-in stubs — even after a manual Stop — so a
       // partial import never leaves empty entities behind.
       removeNamelessStubs()
+      // And drop persons THIS run created that ended up connected to nobody
+      // (cap / side-branch cutoff artifacts — the data-issue checker used to
+      // flag them as "not connected to anyone").
+      const keepId = resolvedRoot
+        ? (People.findByFsId(resolvedRoot)?.id ?? null)
+        : (AppSettings.get('default_root_person_id') ?? null)
+      removeDisconnectedImports(ingester.newFids, keepId)
       AppSettings.set('fs_import_pending', null)
       Audit.setEnabled(true)
     }
-    // New place names → geocode them for the map automatically (background;
-    // uses the FamilySearch Places authority while signed in).
-    void geocodePlaces(() => undefined).catch(() => undefined)
+    // New place names → standardize + geocode automatically (background; uses
+    // the FamilySearch Places authority while signed in). Standardization first
+    // collapses spelling/language variants of the same place ("Budapest,
+    // Hungary" / "Budapest, Magyarország") to ONE canonical form, then the
+    // geocode pass fills in whatever is still missing; finally every open
+    // window is told to refresh. skipKnown keeps re-imports fast.
+    void (async () => {
+      try {
+        // Most places were already resolved by the incremental queue while the
+        // import streamed; wait for it to drain so the two passes never look up
+        // the same name twice, then finish whatever is left.
+        await waitForIncomingGeocode()
+        await standardizePlaces(() => undefined, { skipKnown: true })
+        await geocodePlaces(() => undefined)
+      } catch {
+        /* best-effort background job */
+      }
+      notifyDataChanged()
+    })()
     // Anchor the app on the starting person (the signed-in user's FS person)
     // and tell the renderer so the top bar updates immediately.
     if (!options.keepRoot && resolvedRoot) {
@@ -619,6 +665,7 @@ export function registerIpc(): void {
     applyFsNotes(existing.id, node.no)
     applyFsSources(existing.id, nodes)
     applyFsGodparents(nodes, node.fid, existing.id)
+    applyFsCollaborations(existing.id, node.di)
     // NEW relatives on FamilySearch (spouse/child/parent/godparent) → pull them
     // in complete (record + portrait + notes + sources) and wire the families.
     let addedRelatives: { fid: string; name: string; kind: string }[] = []
@@ -727,6 +774,7 @@ export function registerIpc(): void {
   }
   ipcMain.handle(Channels.workspaces.list, () => listWorkspaces())
   ipcMain.handle(Channels.workspaces.active, () => activeWorkspace())
+  ipcMain.handle(Channels.workspaces.freshBootstrap, () => wasFreshBootstrap())
   ipcMain.handle(Channels.workspaces.create, (_e, name: string) => {
     const ws = createWorkspace(name)
     setActiveWorkspace(ws.id)
