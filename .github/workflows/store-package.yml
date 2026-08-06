@@ -28,8 +28,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The FamilySearch AppKey must be injected here too — electron-vite inlines
+      # import.meta.env.MAIN_VITE_* at BUILD time, so a Store package built
+      # without it ships with the integration silently dormant while the
+      # GitHub-Release build has it. Keep these three in sync with release.yml.
       - name: Build MSIX (AppX) package
         shell: bash
+        env:
+          MAIN_VITE_FS_CLIENT_ID: ${{ secrets.FS_CLIENT_ID }}
+          MAIN_VITE_FS_ENV: production
+          MAIN_VITE_FS_REDIRECT_URI: http://127.0.0.1:4321/auth/callback
         run: |
           npm run dist:win:store -- \
             -c.appx.identityName="${{ secrets.STORE_IDENTITY_NAME }}" \
