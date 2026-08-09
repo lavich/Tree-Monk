@@ -443,6 +443,9 @@ export function exportGedcom(
       if (f.marriageDate) out.push(line(2, 'DATE', f.marriageDate))
       if (f.marriagePlace) out.push(line(2, 'PLAC', f.marriagePlace))
     }
+    // Notes written about the COUPLE itself. Withheld for an anonymized union,
+    // like every other fact of it.
+    if (!anonFam && f.notes) pushNote(out, 1, f.notes)
     // Non-marriage unions (partner / never-a-couple / other) as a custom tag —
     // readers ignore it, our import restores it.
     if (!anonFam && f.relationship) out.push(line(1, '_REL', f.relationship))

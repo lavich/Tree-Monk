@@ -252,6 +252,16 @@ function normalizeCore(raw: string): string {
   // Pure year.
   if (/^\d{4}$/.test(s)) return s
 
+  // Compact, no separators: YYYYMMDD / YYYYMM — "19460704" → "1946-07-04".
+  // FamilySearch keeps whatever a contributor typed, and this shorthand is
+  // common there; without this branch it reaches the tree as a number with no
+  // recognisable year and is reported as an unparsable date. Only accepted when
+  // the month and day are real, so a 7-8 digit id can never be mistaken for one.
+  let c = /^(\d{4})(\d{2})(\d{2})$/.exec(s)
+  if (c && okMonth(Number(c[2])) && okDay(Number(c[3]))) return `${c[1]}-${c[2]}-${c[3]}`
+  c = /^(\d{4})(\d{2})$/.exec(s)
+  if (c && okMonth(Number(c[2]))) return `${c[1]}-${c[2]}`
+
   // ISO-ish, year first: YYYY[-/. ]M[-/. ]D? (day optional). Space is accepted
   // as a separator too, so "1992 04 10" works like "1992-04-10".
   let m = /^(\d{4})[.\-/ ](\d{1,2})(?:[.\-/ ](\d{1,2}))?$/.exec(s)
@@ -368,6 +378,25 @@ export function maskDateTyping(raw: string): string {
   return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`
 }
 
+/**
+ * "19460704" -> "1946-07-04" (and "194607" -> "1946-07").
+ *
+ * A date can reach the tree in this separator-less shorthand — typed that way,
+ * or imported from FamilySearch, which stores a contributor's raw text verbatim.
+ * It is a definite date, so every reader here expands it first instead of seeing
+ * one long number and salvaging only the leading year. Guarded on a real
+ * month/day, so an id-like number is never mistaken for a date.
+ */
+export function expandCompactDate(date: string): string {
+  return date.replace(/(?<!\d)(\d{4})(\d{2})(\d{2})?(?!\d)/g, (m, y, mo, d) => {
+    const mm = Number(mo)
+    if (mm < 1 || mm > 12) return m
+    if (d === undefined) return `${y}-${mo}`
+    const dd = Number(d)
+    return dd >= 1 && dd <= 31 ? `${y}-${mo}-${d}` : m
+  })
+}
+
 interface DateParts {
   year: number | null
   month: number | null
@@ -376,7 +405,7 @@ interface DateParts {
 
 /** Pulls Y/M/D out of an ISO-ish date string (any part may be missing). */
 function dateParts(date: string | null | undefined): DateParts {
-  const m = /(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?/.exec(date ?? '')
+  const m = /(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?/.exec(expandCompactDate(date ?? ''))
   if (!m) return { year: null, month: null, day: null }
   return {
     year: Number(m[1]),

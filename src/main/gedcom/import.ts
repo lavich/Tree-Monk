@@ -580,6 +580,17 @@ export function importGedcomText(text: string): GedcomImportResult {
           : /unmarried|partner|élettárs|lebensgef/i.test(relRaw)
             ? ('partner' as const)
             : null
+      // FAM-level NOTEs (inline text or @N@ pointers) — exactly like a person's.
+      // These were dropped on import, so anything written about the couple
+      // itself ("married in the bride's parish, banns read 3×") vanished, even
+      // though the families table has always had a place to keep it.
+      const famNotes: string[] = []
+      for (const c of fam.children) {
+        if (c.tag !== 'NOTE') continue
+        const text = /^@.+@$/.test(c.value) ? noteTextByXref.get(c.value) ?? '' : c.value
+        const t = text.trim()
+        if (t && !famNotes.includes(t)) famNotes.push(t)
+      }
       const input = {
         gedcomId: xref,
         husbandId: resolve(childValue(fam, 'HUSB')),
@@ -587,7 +598,7 @@ export function importGedcomText(text: string): GedcomImportResult {
         marriageDate: marr.date,
         marriagePlace: marr.place,
         relationship,
-        notes: null,
+        notes: famNotes.length ? famNotes.join('\n\n') : null,
         childIds: fam.children
           .filter((c) => c.tag === 'CHIL')
           .map((c) => resolve(c.value))

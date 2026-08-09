@@ -35,6 +35,7 @@ import type {
   FamilySearchStatus,
   Person
 } from '@shared/types'
+import { DEFAULT_IMPORT_PERSONS, MAX_IMPORT_PERSONS } from '@shared/familysearch'
 
 // ---- Config ----------------------------------------------------------------
 const env = import.meta.env
@@ -68,6 +69,10 @@ export function isFamilySearchConfigured(): boolean {
 // spontaneously signed out. The legacy per-workspace value is adopted once. --
 let cachedToken: string | null = null
 let cachedRefresh: string | null = null
+/** When the access token was ISSUED. FamilySearch kills it 24 hours later (and
+ *  this flow gets no refresh token), so the age alone proves an overnight token
+ *  dead — without it, `isSignedIn()` kept vouching for a corpse. */
+let cachedIssuedAt: number | null = null
 let tokensLoaded = false
 
 function sessionFile(): string {
@@ -75,7 +80,7 @@ function sessionFile(): string {
 }
 
 function encodeTokens(): string {
-  const payload = JSON.stringify({ a: cachedToken, r: cachedRefresh })
+  const payload = JSON.stringify({ a: cachedToken, r: cachedRefresh, t: cachedIssuedAt })
   if (safeStorage.isEncryptionAvailable()) {
     return 'enc:' + safeStorage.encryptString(payload).toString('base64')
   }
@@ -90,9 +95,11 @@ function decodeTokens(raw: string): void {
       ? Buffer.from(raw.slice(4), 'base64').toString('utf8')
       : null
   if (!payload) return
-  const t = JSON.parse(payload) as { a?: string | null; r?: string | null }
+  const t = JSON.parse(payload) as { a?: string | null; r?: string | null; t?: number | null }
   cachedToken = t.a ?? null
   cachedRefresh = t.r ?? null
+  // Age-less legacy session files stay valid until a live call rules on them.
+  cachedIssuedAt = typeof t.t === 'number' ? t.t : null
 }
 
 function persistTokens(): void {
@@ -125,6 +132,7 @@ function loadTokens(): void {
 function clearTokens(): void {
   cachedToken = null
   cachedRefresh = null
+  cachedIssuedAt = null
   try {
     if (existsSync(sessionFile())) unlinkSync(sessionFile())
   } catch {
@@ -141,9 +149,18 @@ export function getCachedToken(): string | null {
   loadTokens()
   return cachedToken
 }
+/** FamilySearch access tokens hard-expire 24 h after issue; report signed-out a
+ *  few minutes early so nobody starts an import on a token about to die. */
+const TOKEN_LIFETIME_MS = 24 * 60 * 60 * 1000 - 5 * 60 * 1000
+
 export function isSignedIn(): boolean {
   loadTokens()
-  return !!cachedToken
+  if (!cachedToken) return false
+  // A token past its lifetime is dead with certainty — saying "signed in" here
+  // is what let the user configure a whole import that could only fail (or,
+  // with replace mode, wipe the tree first). Age-less legacy files pass; the
+  // pre-import probe rules on those.
+  return cachedIssuedAt === null || Date.now() - cachedIssuedAt < TOKEN_LIFETIME_MS
 }
 /** No passwords are handled — kept only to satisfy the legacy IPC contract. */
 export function getCachedCreds(): { username: string; password: string } | null {
@@ -252,6 +269,7 @@ export function loginFamilySearchOAuth(lang = 'en'): Promise<{ ok: boolean; erro
         if (!toks) return finish({ ok: false, error: 'TOKEN_EXCHANGE_FAILED' })
         cachedToken = toks.access
         cachedRefresh = toks.refresh
+        cachedIssuedAt = Date.now()
         persistTokens()
         finish({ ok: true })
       })
@@ -313,6 +331,7 @@ async function tryRefresh(): Promise<boolean> {
     }
     cachedToken = toks.access
     cachedRefresh = toks.refresh ?? cachedRefresh
+    cachedIssuedAt = Date.now()
     persistTokens()
     return true
   })()
@@ -329,7 +348,9 @@ async function tokenRequest(
     const res = await fetch(TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': USER_AGENT, 'Accept-Language': 'en' },
-      body
+      body,
+      // A stuck token refresh would freeze every caller waiting on it.
+      signal: AbortSignal.timeout(30_000)
     })
     if (!res.ok) {
       // eslint-disable-next-line no-console
@@ -346,22 +367,78 @@ async function tokenRequest(
 }
 
 // ---- API layer (bearer + GEDCOM-X + scheduler + 401-refresh) ----------------
-// Small parallel scheduler instead of a serial throttle: up to MAX_CONCURRENT
-// requests in flight, starts spaced MIN_SPACING apart, and an adaptive global
-// backoff honoring Retry-After whenever FamilySearch answers 429. This is what
-// makes the import fast — several requests overlap instead of queuing one by
-// one — while staying polite the moment the server pushes back.
-const MAX_CONCURRENT = 6
-const MIN_SPACING = 60 // ms between request STARTS
+// SELF-TUNING scheduler. FamilySearch does not throttle on request COUNT: the
+// published policy budgets server PROCESSING TIME per window (their example is
+// 18 s of execution per minute), it applies per USER across every product they
+// have open, and different endpoints get different windows. That budget is not
+// something a client can compute up front — so instead of guessing a fixed
+// rate, this probes for it: speed up while everything succeeds, halve hard the
+// moment a 429 arrives (additive increase / multiplicative decrease). The
+// result settles just under whatever the real limit happens to be right now.
+const CONCURRENCY_FLOOR = 2
+const CONCURRENCY_CEILING = 16
+const SPACING_FLOOR = 15 // ms between request STARTS, fastest
+const SPACING_CEILING = 400 // …and slowest, after repeated push-back
+const SPEEDUP_AFTER = 25 // clean responses before taking one more slot
+
+let maxConcurrent = 6
+let spacing = 60
+let okStreak = 0
 let activeReqs = 0
 let lastStart = 0
 let backoffUntil = 0
 const reqQueue: (() => void)[] = []
 
-function pumpQueue(): void {
-  if (activeReqs >= MAX_CONCURRENT || reqQueue.length === 0) return
+/** Rolling 60 s window of server-reported processing time (X-PROCESSING-TIME).
+ *  Not used to gate requests — the 429 feedback loop does that far more
+ *  reliably — but it is the only view we have of the actual budget spend. */
+const procWindow: { at: number; ms: number }[] = []
+
+function notePace(res: Response): void {
   const now = Date.now()
-  const at = Math.max(lastStart + MIN_SPACING, backoffUntil)
+  const ms = Number(res.headers.get('X-PROCESSING-TIME'))
+  if (Number.isFinite(ms) && ms > 0) procWindow.push({ at: now, ms })
+  while (procWindow.length && now - procWindow[0].at > 60_000) procWindow.shift()
+
+  if (res.status === 429) {
+    // Multiplicative decrease: back off hard, and stay backed off.
+    okStreak = 0
+    maxConcurrent = Math.max(CONCURRENCY_FLOOR, Math.floor(maxConcurrent / 2))
+    spacing = Math.min(SPACING_CEILING, Math.max(spacing * 2, 60))
+    return
+  }
+  if (!res.ok) return
+  // Additive increase: reclaim throughput slowly, a slot at a time, then by
+  // shaving the gap between starts.
+  if (++okStreak >= SPEEDUP_AFTER) {
+    okStreak = 0
+    if (maxConcurrent < CONCURRENCY_CEILING) maxConcurrent++
+    else if (spacing > SPACING_FLOOR) spacing = Math.max(SPACING_FLOOR, spacing - 5)
+    pumpQueue()
+  }
+}
+
+/** Live view of the pacing loop — surfaced for diagnostics. */
+export function familySearchPaceStats(): {
+  concurrency: number
+  spacingMs: number
+  processingMsLastMinute: number
+  requestsLastMinute: number
+} {
+  const now = Date.now()
+  const recent = procWindow.filter((e) => now - e.at <= 60_000)
+  return {
+    concurrency: maxConcurrent,
+    spacingMs: spacing,
+    processingMsLastMinute: Math.round(recent.reduce((n, e) => n + e.ms, 0)),
+    requestsLastMinute: recent.length
+  }
+}
+
+function pumpQueue(): void {
+  if (activeReqs >= maxConcurrent || reqQueue.length === 0) return
+  const now = Date.now()
+  const at = Math.max(lastStart + spacing, backoffUntil)
   if (at > now) {
     setTimeout(pumpQueue, at - now)
     return
@@ -390,11 +467,22 @@ function retryAfterMs(res: Response, attempt: number): number {
   const ra = Number(res.headers.get('Retry-After'))
   return Number.isFinite(ra) && ra > 0 ? ra * 1000 : 2000 * (attempt + 1)
 }
+/**
+ * Hard ceiling for a single API call. Without it a socket that never answers
+ * holds BOTH its scheduler slot and its traversal worker forever: the other
+ * workers keep spinning because `busyWorkers` never drops, the import promise
+ * never settles, and the UI shows a spinner that can never finish. A timeout
+ * turns that permanent hang into one skipped request.
+ */
+const REQUEST_TIMEOUT_MS = 60_000
+
 /** One scheduled fetch: waits for a slot, runs, frees the slot. */
 async function schedFetch(url: string, init: RequestInit): Promise<Response> {
   await acquireSlot()
   try {
-    return await fetch(url, init)
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+    notePace(res)
+    return res
   } finally {
     releaseSlot()
   }
@@ -406,19 +494,34 @@ async function gxGet(
 ): Promise<{ status: number; doc: GxDocument | null; location?: string }> {
   loadTokens()
   if (!cachedToken) return { status: 401, doc: null }
+  // Remembered so an exhausted retry loop can say WHY it gave up instead of
+  // reporting a bare 429 that never happened.
+  let lastError: string | null = null
   for (let attempt = 0; attempt < 4; attempt++) {
     const tokenUsed: string | null = cachedToken
-    const res = await schedFetch(API + path, {
-      redirect: 'manual',
-      headers: {
-        Authorization: `Bearer ${tokenUsed}`,
-        Accept: media,
-        'User-Agent': USER_AGENT,
-        // Node's fetch defaults to "accept-language: *", which the Family Tree
-        // WRITE upstream rejects with 400 — always send a concrete language.
-        'Accept-Language': 'en'
-      }
-    })
+    let res: Response
+    try {
+      res = await schedFetch(API + path, {
+        redirect: 'manual',
+        headers: {
+          Authorization: `Bearer ${tokenUsed}`,
+          Accept: media,
+          'User-Agent': USER_AGENT,
+          // Node's fetch defaults to "accept-language: *", which the Family Tree
+          // WRITE upstream rejects with 400 — always send a concrete language.
+          'Accept-Language': 'en'
+        }
+      })
+    } catch (err) {
+      // Timed out or the connection dropped. Retry a few times before giving
+      // up — a single flaky request must not cost the person, and must never
+      // stall the whole import.
+      lastError = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+      // eslint-disable-next-line no-console
+      console.error('[fs] GET', path, `attempt ${attempt + 1}/4 failed —`, lastError)
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)))
+      continue
+    }
     if (res.status === 401 && attempt === 0 && (await tryRefresh())) continue
     if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
       const wait = retryAfterMs(res, attempt)
@@ -453,6 +556,11 @@ async function gxGet(
     const doc = (await res.json().catch(() => null)) as GxDocument | null
     return { status: res.status, doc }
   }
+  if (lastError) {
+    // eslint-disable-next-line no-console
+    console.error('[fs] GET', path, 'gave up after 4 attempts —', lastError)
+    return { status: 0, doc: null }
+  }
   return { status: 429, doc: null }
 }
 
@@ -466,20 +574,28 @@ async function gxPost(
   if (!cachedToken) return { status: 401 }
   for (let attempt = 0; attempt < 4; attempt++) {
     const tokenUsed: string | null = cachedToken
-    const res = await schedFetch(API + path, {
-      method: 'POST',
-      redirect: 'manual',
-      headers: {
-        Authorization: `Bearer ${tokenUsed}`,
-        'Content-Type': media,
-        Accept: media,
-        'User-Agent': USER_AGENT,
-        // undici would default to "accept-language: *" → TF write upstream 400.
-        'Accept-Language': 'en',
-        ...(reason ? { 'X-Reason': reason } : {})
-      },
-      body: JSON.stringify(body)
-    })
+    let res: Response
+    try {
+      res = await schedFetch(API + path, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          Authorization: `Bearer ${tokenUsed}`,
+          'Content-Type': media,
+          Accept: media,
+          'User-Agent': USER_AGENT,
+          // undici would default to "accept-language: *" → TF write upstream 400.
+          'Accept-Language': 'en',
+          ...(reason ? { 'X-Reason': reason } : {})
+        },
+        body: JSON.stringify(body)
+      })
+    } catch {
+      // A WRITE is NOT retried on a timeout: the server may already have
+      // applied it, and a second POST would duplicate the conclusion. Fail
+      // loudly instead and let the caller decide.
+      return { status: 0, error: 'NETWORK' }
+    }
     if (res.status === 401 && attempt === 0 && (await tryRefresh())) continue
     if (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) {
       // Throttled or the service is momentarily unavailable — back off and retry.
@@ -609,6 +725,12 @@ interface GxSourceDescription {
   citations?: { value?: string }[]
   notes?: { subject?: string; text?: string }[]
   links?: Record<string, { href?: string }>
+  /** GEDCOM X: the time period the source COVERS — i.e. the record's own date.
+   *  For an INDEXED record the date is also spelled out in the citation text, so
+   *  ignoring this field went unnoticed. An UNINDEXED source (a film/catalog
+   *  image attached by hand) has no citation text at all, so this is the only
+   *  date FamilySearch ever ships for it. */
+  coverage?: { temporal?: { original?: string; formal?: string } }[]
 }
 interface GxExtrasDoc {
   sourceDescriptions?: GxSourceDescription[]
@@ -621,6 +743,64 @@ export interface PersonExtras {
   sources: FsNode[]
   /** FamilySearch "Collaborate" discussions attached to the person. */
   di: { id?: string | null; ti?: string | null; bo?: string; cr?: number | null }[]
+}
+
+/**
+ * The cited record's OWN date, when the source description carries one.
+ *
+ * MEASURED, not assumed: FamilySearch's platform API does NOT expose a source
+ * date. A source created in their web UI *with* a date comes back as nothing
+ * but `{attribution, id, lang, links, resourceType, titles}` — verified against
+ * both `/persons/{id}/sources` and `/sources/descriptions/{id}`, in both the
+ * GEDCOM X and the FamilySearch media type. The date column their UI shows is
+ * the date of the EVENT a source is tagged to, not a property of the source,
+ * and the tagging is not exposed either.
+ *
+ * `coverage.temporal` is still read because it is the standard GEDCOM X place
+ * for it and costs nothing — if FamilySearch (or another producer) ever fills
+ * it in, dates start appearing with no further work. Their `sortKey` is NOT
+ * consulted: it is an ordinal ("0000000001"), never a date.
+ */
+function sourceRecordDate(d: GxSourceDescription): string | null {
+  const YEAR = /\b(1[5-9]\d{2}|20\d{2})\b/
+  for (const c of d.coverage ?? []) {
+    const t = c.temporal
+    if (!t) continue
+    // GEDCOM X formal dates read "+1957-12-17"; ranges are "start/end".
+    const formal = (t.formal ?? '').split('/')[0].replace(/^\+/, '').trim()
+    if (formal && YEAR.test(formal)) return formal
+    const original = (t.original ?? '').trim()
+    if (original && YEAR.test(original)) return original
+  }
+  return null
+}
+
+/**
+ * Which kind of record a citation describes, as a GEDCOM event tag.
+ *
+ * FamilySearch's own citation text for a BROWSED (unindexed) image names the
+ * register it came from, in English, regardless of the interface language:
+ *
+ *   … Heves > Tarnabod > Births (Születtek) 1909-1913 > image 5 of 37 …
+ *   … Heves > Csány    > Marriages (Házasultak) 1929-1942 > image 108 …
+ *
+ * That word is the one solid fact such a source carries beyond its title, and
+ * it is what lets the app tie the source to the right event — which in turn is
+ * how a date can be shown for records FamilySearch dates in its own UI but does
+ * not expose through the API.
+ */
+function citationEventTag(text: string | null | undefined): string | null {
+  if (!text) return null
+  // Match the register name as it appears between the "…" path separators.
+  const m = /\b(Births?|Christenings?|Baptisms?|Marriages?|Deaths?|Burials?)\b/i.exec(text)
+  if (!m) return null
+  const w = m[1].toLowerCase()
+  if (w.startsWith('birth')) return 'BIRT'
+  if (w.startsWith('christening') || w.startsWith('baptism')) return 'CHR'
+  if (w.startsWith('marriage')) return 'MARR'
+  if (w.startsWith('death')) return 'DEAT'
+  if (w.startsWith('burial')) return 'BURI'
+  return null
 }
 
 /** FamilySearch memory-artifact id from a media URL (both the portrait redirect
@@ -737,6 +917,11 @@ async function fetchPersonExtras(fid: string): Promise<PersonExtras> {
       au: null,
       pu: d.citations?.[0]?.value ?? null,
       pg: null,
+      dt: sourceRecordDate(d),
+      // Which event this record documents. Lets the source sit under the right
+      // fact on the profile, and gives an undated (browsed-image) source a date
+      // to show — the date of that very event.
+      ft: citationEventTag(d.citations?.[0]?.value) ?? undefined,
       // The record's own URL goes into the note — the sources panel renders
       // URLs as clickable links, so the user can open the original record.
       no: [d.notes?.[0]?.text, d.about].filter(Boolean).join('\n') || null
@@ -827,13 +1012,42 @@ async function gxGetAtom(path: string): Promise<{ ids: string[]; next: string | 
 
 
 /** Resolve the starting person fid: explicit root, else the current user. */
+/** HTTP status of the last `current-person` attempt — so a failure to resolve
+ *  the starting person can name its cause instead of dying anonymously. */
+let lastRootStatus = 0
+
 async function resolveRoot(root?: string): Promise<string | null> {
   await selectTree('GLOBAL')
   if (root) return root
   const r = await gxGet('/platform/tree/current-person')
+  lastRootStatus = r.status
   if (r.location) return r.location.replace(/^.*\/persons\//, '').replace(/[/?].*$/, '')
   if (r.doc?.persons?.[0]?.id) return r.doc.persons[0].id
+  // eslint-disable-next-line no-console
+  console.error('[fs] current-person returned', r.status, '- no person id and no redirect')
   return null
+}
+
+/**
+ * The one failure the user can fix entirely on their own is a dead session, so
+ * it carries a machine-readable marker: the renderer looks for it and answers
+ * with a localized "sign in again" toast plus a signed-out UI, instead of the
+ * generic import-failed state whose real cause only the dev console ever saw.
+ */
+export const FS_SESSION_EXPIRED = 'FS_SESSION_EXPIRED'
+
+function rootFailure(): Error {
+  const code = lastRootStatus === 401 ? `${FS_SESSION_EXPIRED}: ` : ''
+  return new Error(`${code}Could not determine the starting person: ${rootFailureReason(lastRootStatus)}.`)
+}
+
+/** Turns the bare status into something a user (or a bug report) can act on. */
+function rootFailureReason(status: number): string {
+  if (status === 401) return 'the FamilySearch session expired — sign out and sign in again'
+  if (status === 429) return 'FamilySearch is rate-limiting this account — try again in a few minutes'
+  if (status === 0) return 'FamilySearch could not be reached (network or timeout)'
+  if (status === 403) return 'this FamilySearch account is not allowed to read the Family Tree'
+  return `FamilySearch answered HTTP ${status}`
 }
 
 const status = (
@@ -854,8 +1068,6 @@ export async function importFromFamilySearch(
   onNode: (node: FsNode) => void
 ): Promise<{ rootFid: string }> {
   cancelled = false
-  if (opts.replace === true) wipeDatabase()
-  relSnapshot = null // reload the relatives snapshot from the (possibly wiped) DB
   status(onStatus, 'auth')
 
   // The tree to import from — shared Family Tree ('GLOBAL') or a personal tree.
@@ -871,8 +1083,24 @@ export async function importFromFamilySearch(
       const first = await gxGetAtom(`/platform/trees/${enc(treeId)}/persons?count=1&view=%22identifiers%22`)
       root = first.ids[0] ?? null
     }
+  } else {
+    // An EXPLICIT root skips the server round-trip that would expose a dead
+    // session — probe once so the failure happens cleanly, up front.
+    const probe = await gxGet('/platform/tree/current-person')
+    if (probe.status === 401) {
+      lastRootStatus = 401
+      throw rootFailure()
+    }
   }
-  if (!root) throw new Error('Could not determine the starting person.')
+  if (!root) {
+    throw rootFailure()
+  }
+
+  // Destroying anything is only safe NOW, with the session provably alive.
+  // This used to run FIRST — an expired session in replace mode wiped the
+  // database and then failed, leaving the user with an empty tree.
+  if (opts.replace === true) wipeDatabase()
+  relSnapshot = null // reload the relatives snapshot from the (possibly wiped) DB
 
   status(onStatus, 'fetching_root')
   // BFS from the starting person over /families, so EVERY person is fully
@@ -882,8 +1110,16 @@ export async function importFromFamilySearch(
   // always included.
   const ascend = Math.max(0, opts.ascend ?? 4)
   const descend = Math.max(0, opts.childrenDepth ?? 2)
+  // Side branches (siblings of ancestors, their children, cousins…) are their
+  // OWN setting. They used to share the `descend` number, which is why a
+  // seemingly harmless "descendants = 10" quietly meant "cousins ten levels
+  // out from every ancestor" and pulled in tens of thousands of people.
+  const collateral = Math.max(0, opts.depth ?? 1)
 
-  const maxPersons = Math.max(1, opts.maxPersons ?? 5000)
+  // Hard ceiling for this edition. Clamped HERE, not just in the dialog, so a
+  // remembered setting from an older version (or any other caller) can never
+  // start an import that runs for hours.
+  const maxPersons = Math.min(MAX_IMPORT_PERSONS, Math.max(1, opts.maxPersons ?? DEFAULT_IMPORT_PERSONS))
 
   // Priority-ordered traversal: DIRECT ANCESTORS first (closest generation
   // first), then THEIR children (collateral: siblings, aunts/uncles, cousins),
@@ -903,6 +1139,13 @@ export async function importFromFamilySearch(
   const gen = new Map<string, number>()
   const role = new Map<string, Role>()
   const allEdges: FsNode[] = []
+  /**
+   * Couple relationships seen anywhere during the walk. `allEdges` is drained as
+   * edges are flushed, so the ids are captured HERE, where they arrive — for
+   * free, no extra request. The enrichment pass then pulls the notes written
+   * about the couple itself.
+   */
+  const couples = new Map<string, { a: string; b: string }>()
   const pq: Item[] = [{ fid: root, gen: 0, role: 'root', prio: 0, side: 0 }]
   gen.set(root, 0)
   role.set(root, 'root')
@@ -921,6 +1164,24 @@ export async function importFromFamilySearch(
   // all already emitted is flushed — so the tree visibly grows person by person
   // AND the relationships wire up live, not in one burst at the end.
   status(onStatus, 'ancestors')
+
+  // BULK PRELOAD of the direct line. `/platform/tree/ancestry` returns up to
+  // eight generations in ONE response, with full person details — so the whole
+  // ancestral backbone costs a single request instead of one per person. Only
+  // the details themselves are trusted: if the server answers with summaries
+  // (the detail flag has changed name across API versions) the cache stays
+  // empty and every person is fetched individually exactly as before.
+  const preloaded = new Map<string, GxPerson>()
+  if (ascend > 0) {
+    const gens = Math.min(MAX_GEN, Math.max(1, ascend))
+    const anc = await gxGet(
+      `/platform/tree/ancestry?person=${enc(root)}&generations=${gens}&personDetails=true`
+    )
+    for (const p of anc.doc?.persons ?? []) {
+      if (p.id && p.names?.length) preloaded.set(p.id, p)
+    }
+  }
+
   const emitted = new Set<string>()
   const edgeSeen = new Set<string>()
   let processed = 0
@@ -941,6 +1202,7 @@ export async function importFromFamilySearch(
   const queueEdges = (edges: FsNode[]): void => {
     for (const e of edges) {
       const k = edgeKey(e)
+      if (e.t === 'f' && e.crid) couples.set(e.crid, { a: e.a, b: e.b })
       if (edgeSeen.has(k)) continue
       edgeSeen.add(k)
       allEdges.push(e)
@@ -998,8 +1260,17 @@ export async function importFromFamilySearch(
     // The person record and their families are independent — fetch both at once.
     // Extras (portrait/photos/notes/sources) are DEFERRED to the enrichment
     // phase, so the tree core needs only these ~2 requests per person.
+    // Already have this person from the bulk ancestry call? Then only the
+    // family edges still need a request — half the traffic for the whole
+    // direct line.
+    const cached = preloaded.get(it.fid)
     const [pr, fam] = await Promise.all([
-      gxGet(`/platform/tree/persons/${enc(it.fid)}`),
+      cached
+        ? Promise.resolve<{ status: number; doc: GxDocument | null }>({
+            status: 200,
+            doc: { persons: [cached] }
+          })
+        : gxGet(`/platform/tree/persons/${enc(it.fid)}`),
       fetchPersonFamilies(it.fid, treeId)
     ])
     const gp = pr.doc?.persons?.find((x) => x.id === it.fid) ?? pr.doc?.persons?.[0]
@@ -1039,7 +1310,7 @@ export async function importFromFamilySearch(
           // line, before root's descendants). The chain is BOUNDED by the same
           // descend setting: 1 → siblings/aunts/uncles only, 2 → + their
           // children (cousins), … — previously it cascaded without limit.
-          if (it.side < descend) consider(rel.fid, it.gen - 1, 'collateral', 1000 + hops, it.side + 1)
+          if (it.side < collateral) consider(rel.fid, it.gen - 1, 'collateral', 1000 + hops, it.side + 1)
         }
       }
     }
@@ -1072,7 +1343,138 @@ export async function importFromFamilySearch(
       }
     }
   }
-  await Promise.all(Array.from({ length: 6 }, () => worker()))
+  // ---- Direct-line fast path ----------------------------------------------
+  // With no descendants and no side branches requested, the pedigree is pulled
+  // as WHOLE GENERATIONS via /tree/ancestry (ahnentafel-numbered, max 8
+  // generations per request — measured: gen=8 answers, gen=11 is HTTP 400)
+  // instead of crawling person by person. Parents are DERIVED from the
+  // numbering (father of n is 2n, mother 2n+1), so the per-person /families
+  // discovery round-trip disappears — roughly HALF the requests, and under
+  // FamilySearch's processing-time budget that means roughly half the
+  // wall-clock. Marriage facts still arrive: each person's own record carries
+  // their couple relationships (verified live). Any surprise from the endpoint
+  // falls back to the classic walker below.
+  const directLine = descend === 0 && collateral === 0
+  const runDirectLine = async (): Promise<boolean> => {
+    // fid → smallest ahnentafel position (pedigree collapse keeps the nearest).
+    const skeleton = new Map<string, number>()
+    const note = (fid: string, abs: number): void => {
+      const cur = skeleton.get(fid)
+      if (cur === undefined || abs < cur) skeleton.set(fid, abs)
+    }
+    /** One /ancestry slice: ahnentafel number → fid ("1-S" spouse markers skipped). */
+    const slice = async (fromFid: string, gens: number): Promise<Map<number, string>> => {
+      const r = await gxGet(`/platform/tree/ancestry?person=${enc(fromFid)}&generations=${gens}`)
+      const out = new Map<number, string>()
+      for (const gp of r.doc?.persons ?? []) {
+        const asc = gp.display?.ascendancyNumber ?? ''
+        if (gp.id && /^\d+$/.test(asc)) out.set(Number(asc), gp.id)
+      }
+      return out
+    }
+    // Cover `ascend` generations in ≤8-generation hops: the top row of one
+    // slice seeds the next, positions composed ahnentafel-style.
+    const hops: { fid: string; base: number; left: number }[] = [{ fid: root, base: 1, left: ascend }]
+    while (hops.length) {
+      if (cancelled) return true
+      const hop = hops.shift()!
+      const gens = Math.min(hop.left, MAX_GEN)
+      const got = await slice(hop.fid, gens)
+      if (hop.base === 1 && got.size <= 1) return false // endpoint gave nothing → walker
+      const tipRow = 2 ** gens
+      for (const [m, fid] of got) {
+        const k = Math.floor(Math.log2(m))
+        const abs = hop.base * 2 ** k + (m - 2 ** k)
+        note(fid, abs)
+        if (hop.left > gens && m >= tipRow && m < tipRow * 2) {
+          hops.push({ fid, base: abs, left: hop.left - gens })
+        }
+      }
+    }
+    // Closest generations first, so the person cap keeps the important people.
+    const order = [...skeleton.entries()]
+      .sort((a, b) => a[1] - b[1])
+      .map(([fid]) => fid)
+      .slice(0, maxPersons)
+    const extras: string[] = []
+    const fetchOne = async (fid: string, collectRootKin: boolean): Promise<void> => {
+      const r = await gxGet(`/platform/tree/persons/${enc(fid)}`)
+      const gp = r.doc?.persons?.find((x) => x.id === fid) ?? r.doc?.persons?.[0]
+      const n = gp ? personToNode(gp) : null
+      if (n && n.t === 'i') {
+        onNode(n)
+        emitted.add(fid)
+        nodeByFid.set(fid, n as FsNode & { t: 'i' })
+        processed++
+        status(onStatus, 'processed', { name: `${n.g} ${n.s}`.trim() || fid, count: processed })
+      }
+      // Couple + parent-child edges ride along on the person document —
+      // flushEdges only ever links persons that were actually fetched.
+      if (r.doc) queueEdges(relationshipNodes(r.doc))
+      // Record which relatives FamilySearch SHOWS for this person. A direct-line
+      // import deliberately skips children and siblings — without this record
+      // the change watcher flags every imported person with "new relatives on
+      // FamilySearch" the moment the import finishes (that exact bug shipped
+      // once). The walker path records the same thing from /families.
+      const rels: string[] = []
+      for (const rel of r.doc?.relationships ?? []) {
+        if (rel.type && !/Couple$/i.test(rel.type)) continue
+        for (const ref of [rel.person1, rel.person2]) {
+          const id = ref?.resourceId ?? null
+          if (id && id !== fid) rels.push(id)
+        }
+      }
+      for (const cap of r.doc?.childAndParentsRelationships ?? []) {
+        const c = cap.child?.resourceId ?? null
+        const p1 = cap.parent1?.resourceId ?? null
+        const p2 = cap.parent2?.resourceId ?? null
+        if (c === fid) {
+          if (p1) rels.push(p1)
+          if (p2) rels.push(p2)
+        } else if (c && (p1 === fid || p2 === fid)) {
+          rels.push(c)
+        }
+      }
+      if (collectRootKin) {
+        // "The starting person's spouse(s) and children are always included."
+        // The person document has proven reliable for couples but child rows
+        // vary — ONE /families call on the root settles both the extras and
+        // the root's own known-relatives record.
+        const fam = await fetchPersonFamilies(fid, treeId)
+        queueEdges(fam.edges)
+        for (const rel of fam.relatives) {
+          rels.push(rel.fid)
+          if ((rel.kind === 'spouse' || rel.kind === 'child') && !skeleton.has(rel.fid)) {
+            extras.push(rel.fid)
+          }
+        }
+      }
+      recordKnownRelatives(fid, rels)
+      flushEdges(false)
+    }
+    // Root first (the UI re-roots on it the moment it lands), then the rest.
+    await fetchOne(order[0] ?? root, true)
+    const queue = [...order.slice(1), ...new Set(extras)]
+    const fworker = async (): Promise<void> => {
+      for (;;) {
+        if (cancelled) return
+        const fid = queue.shift()
+        if (!fid) return
+        if (emitted.has(fid)) continue
+        try {
+          await fetchOne(fid, false)
+        } catch {
+          /* one lost person must not sink the import */
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: 6 }, () => fworker()))
+    return true
+  }
+
+  if (!directLine || !(await runDirectLine())) {
+    await Promise.all(Array.from({ length: 6 }, () => worker()))
+  }
   status(onStatus, 'ancestors_done')
 
   saveRelSnapshot()
@@ -1118,7 +1520,38 @@ export async function importFromFamilySearch(
         })
       }
     }
-    await Promise.all(Array.from({ length: 4 }, () => eworker()))
+    // Twice the workers the fixed scheduler used to allow: the pacing loop is
+    // the real governor now, so extra workers only fill slots it has already
+    // decided are safe — they can no longer outrun the server on their own.
+    await Promise.all(Array.from({ length: 8 }, () => eworker()))
+
+    // Notes written about the COUPLE (not about either spouse). They sit on
+    // their own sub-resource, so nothing ever fetched them and they went
+    // missing on every import — even though the ingester has always had a
+    // column waiting for them.
+    const crids = [...couples].filter(([, p]) => emitted.has(p.a) && emitted.has(p.b)).map(([id]) => id)
+    const cworker = async (): Promise<void> => {
+      for (;;) {
+        if (cancelled) return
+        const crid = crids.shift()
+        if (!crid) return
+        const pair = couples.get(crid)!
+        try {
+          const r = await gxGet(`/platform/tree/couple-relationships/${enc(crid)}/notes`)
+          const rel = (
+            r.doc as unknown as { relationships?: { notes?: { subject?: string; text?: string }[] }[] } | null
+          )?.relationships?.[0]
+          const text = (rel?.notes ?? [])
+            .map((n) => [n.subject, n.text].filter(Boolean).join(': ').trim())
+            .filter(Boolean)
+            .join('\n\n')
+          if (text) onNode({ t: 'f', a: pair.a, b: pair.b, mn: text })
+        } catch {
+          /* best-effort, exactly like the person extras */
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: 3 }, () => cworker()))
   }
 
   // Always anchor the tree on the starting person (the signed-in user's FS
@@ -1130,6 +1563,60 @@ export async function importFromFamilySearch(
   return { rootFid: root }
 }
 
+/**
+ * Throttling self-test against FamilySearch's dedicated `/platform/throttled`
+ * endpoint, which answers 429 on purpose. It proves — against the real server,
+ * not a mock — that the client reads Retry-After, waits, retries and recovers,
+ * and it reports where the pacing loop settled. Worth running before blaming an
+ * import on the network.
+ */
+export async function probeFamilySearchThrottle(): Promise<{
+  ok: boolean
+  status: number
+  attempts: number
+  waitedMs: number
+  retryAfterMs: number | null
+  pace: ReturnType<typeof familySearchPaceStats>
+}> {
+  const started = Date.now()
+  let retryAfter: number | null = null
+  let attempts = 0
+  let status = 0
+  for (; attempts < 4; attempts++) {
+    let res: Response
+    try {
+      res = await schedFetch(API + '/platform/throttled', {
+        headers: {
+          ...(cachedToken ? { Authorization: `Bearer ${cachedToken}` } : {}),
+          Accept: 'application/json',
+          'User-Agent': USER_AGENT,
+          'Accept-Language': 'en'
+        }
+      })
+    } catch {
+      break
+    }
+    status = res.status
+    if (res.status !== 429) {
+      attempts++
+      break
+    }
+    const ra = Number(res.headers.get('Retry-After'))
+    retryAfter = Number.isFinite(ra) && ra > 0 ? ra * 1000 : null
+    const wait = retryAfterMs(res, attempts)
+    backOff(wait)
+    await new Promise((r) => setTimeout(r, wait))
+  }
+  return {
+    ok: status > 0 && status !== 429,
+    status,
+    attempts,
+    waitedMs: Date.now() - started,
+    retryAfterMs: retryAfter,
+    pace: familySearchPaceStats()
+  }
+}
+
 export async function previewFamilySearch(opts: {
   root?: string
   ascend?: number
@@ -1137,7 +1624,9 @@ export async function previewFamilySearch(opts: {
 }): Promise<FamilySearchPreview> {
   status(opts.onStatus, 'auth')
   const root = await resolveRoot(opts.root)
-  if (!root) throw new Error('Could not determine the starting person.')
+  if (!root) {
+    throw rootFailure()
+  }
   status(opts.onStatus, 'fetching_root')
   const generations = Math.min(MAX_GEN, Math.max(1, opts.ascend ?? 4))
   const r = await gxGet(`/platform/tree/ancestry?person=${enc(root)}&generations=${generations}`)

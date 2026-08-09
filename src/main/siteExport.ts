@@ -162,11 +162,23 @@ const yearOf = (d: string | null): string => {
   return m ? m[1] : ''
 }
 
-export function exportSite(filePath: string, langRaw: string): string {
+/**
+ * `personIds` narrows the export to a chosen circle (bloodline, ancestors,
+ * descendants — computed in the renderer with the same scope logic the
+ * dashboard uses). Undefined = the whole tree, the previous behaviour. Families
+ * follow the people: a family is kept when at least one partner is in scope, so
+ * couples and children never dangle.
+ */
+export function exportSite(filePath: string, langRaw: string, personIds?: string[]): string {
   const lang: Lang = langRaw === 'hu' || langRaw === 'de' ? langRaw : 'en'
   const l = L[lang]
-  const people = People.list()
-  const families = Families.list()
+  const keep = personIds && personIds.length ? new Set(personIds) : null
+  const people = keep ? People.list().filter((p) => keep.has(p.id)) : People.list()
+  const families = keep
+    ? Families.list().filter(
+        (f) => (f.husbandId && keep.has(f.husbandId)) || (f.wifeId && keep.has(f.wifeId))
+      )
+    : Families.list()
   const byId = new Map(people.map((p) => [p.id, p]))
 
   const linkTo = (id: string | null | undefined): string => {
@@ -333,11 +345,17 @@ ${sections}
  * (* birth, ~ christening, ⚭ marriage, † death, ▭ burial, ⌂ residence).
  * Confidential people are excluded from both.
  */
-export function exportIndexes(filePath: string, langRaw: string): string {
+/** See {@link exportSite} for `personIds`. */
+export function exportIndexes(filePath: string, langRaw: string, personIds?: string[]): string {
   const lang: Lang = langRaw === 'hu' || langRaw === 'de' ? langRaw : 'en'
   const l = L[lang]
-  const people = People.list().filter((p) => !p.isPrivate)
-  const families = Families.list()
+  const keep = personIds && personIds.length ? new Set(personIds) : null
+  const people = People.list().filter((p) => !p.isPrivate && (!keep || keep.has(p.id)))
+  const families = keep
+    ? Families.list().filter(
+        (f) => (f.husbandId && keep.has(f.husbandId)) || (f.wifeId && keep.has(f.wifeId))
+      )
+    : Families.list()
   const byId = new Map(people.map((p) => [p.id, p]))
   const nameOf = (p: Person): string => fullName(p, lang)
   const yr = (d: string | null): string => {

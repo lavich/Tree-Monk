@@ -1095,6 +1095,9 @@ export interface PlaceRow {
   place_type?: string | null
   parent_name?: string | null
   gov_id?: string | null
+  /** Canonical form of this spelling ("Csány, Heves, Hungary" → "Csány, Heves,
+   *  Magyarország"). Records keep their raw text; consumers group through this. */
+  canonical?: string | null
 }
 
 // ---------- App settings (key/value) ----------
@@ -1493,6 +1496,11 @@ export const Places = {
   list(): PlaceRow[] {
     return getDb().prepare('SELECT * FROM places').all() as PlaceRow[]
   },
+  /** Point a raw spelling at its canonical form (mapping only — no record is
+   *  ever rewritten; see geo.standardizePlaces). */
+  setCanonical(name: string, canonical: string): void {
+    getDb().prepare('UPDATE places SET canonical = ? WHERE name = ?').run(canonical.trim() || null, name.trim())
+  },
   get(name: string): PlaceRow | null {
     return (
       (getDb().prepare('SELECT * FROM places WHERE name = ?').get(name.trim()) as
@@ -1713,6 +1721,49 @@ export const Attributes = {
 // cleaned up explicitly by People.remove / Families.remove.
 
 export type WitnessOwnerType = 'person' | 'family'
+
+/**
+ * People who took part in a VITAL fact, with a role: the midwife at a birth,
+ * the officiating priest at a christening or burial, the certifying doctor at a
+ * death. Keyed by the GEDCOM tag of the fact, so the same person can have a
+ * different midwife and priest without inventing a synthetic event for each.
+ */
+export const FactParticipants = {
+  /** Participants of one fact, in display order. */
+  forFact(personId: string, factTag: string): { personId: string; role: string | null }[] {
+    return getDb()
+      .prepare(
+        'SELECT participant_id, role FROM fact_participants WHERE person_id = ? AND fact_tag = ? ORDER BY ordinal, rowid'
+      )
+      .all(personId, factTag)
+      .map((r) => {
+        const row = r as { participant_id: string; role: string | null }
+        return { personId: row.participant_id, role: row.role }
+      })
+  },
+  add(personId: string, factTag: string, participantId: string, role: string | null): void {
+    if (personId === participantId) return // nobody assists at their own birth
+    const ord = (
+      getDb()
+        .prepare(
+          'SELECT COALESCE(MAX(ordinal), -1) + 1 AS n FROM fact_participants WHERE person_id = ? AND fact_tag = ?'
+        )
+        .get(personId, factTag) as { n: number }
+    ).n
+    getDb()
+      .prepare(
+        `INSERT INTO fact_participants (person_id, fact_tag, participant_id, role, ordinal)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(person_id, fact_tag, participant_id) DO UPDATE SET role = excluded.role`
+      )
+      .run(personId, factTag, participantId, role?.trim() || null, ord)
+  },
+  remove(personId: string, factTag: string, participantId: string): void {
+    getDb()
+      .prepare('DELETE FROM fact_participants WHERE person_id = ? AND fact_tag = ? AND participant_id = ?')
+      .run(personId, factTag, participantId)
+  }
+}
 
 export const Witnesses = {
   /** The witness person-ids for an owner, in display order. */

@@ -559,6 +559,10 @@ export interface PlaceInfo {
   parentName: string | null
   /** GOV id — gov.genealogy.net/item/show/<id>. */
   govId: string | null
+  /** Canonical form of this spelling; null when this row IS the canonical one.
+   *  Consumers (stats, exports) group variants through it — records are never
+   *  rewritten to it. */
+  canonical: string | null
 }
 
 /** A free-form person attribute (GEDCOM FACT/TYPE): height, haplogroup, … */

@@ -44,13 +44,13 @@
       "other": "Sonstiges"
     },
     "standardizeTitle": "Orte standardisieren",
-    "standardizeDesc": "Alle Ortsnamen in die kanonische Form umschreiben (führt Duplikate wie „…Hungary“ / „…Magyarország“ zusammen).",
+    "standardizeDesc": "Verknüpft Schreibvarianten desselben Ortes (z. B. „Hungary“ / „Magyarország“), damit Statistik und Karte sie als einen Ort behandeln. Deine Daten werden nie umgeschrieben — jeder Eintrag behält den Quelltext.",
     "standardizeBtn": "Standardisieren",
     "standardizing": "Orte werden standardisiert…",
     "standardizingHint": "Kanonische Ortsnamen werden gesucht…",
     "progress": "{{done}}/{{total}} Orte · {{changed}} vereinheitlicht",
-    "standardizeDone": "Orte in {{count}} Datensätzen vereinheitlicht",
-    "standardizeNone": "Alle Orte sind bereits einheitlich",
+    "standardizeDone": "{{count}} Ortsvarianten verknüpft",
+    "standardizeNone": "Alle Ortsnamen sind bereits verknüpft",
     "standardizeFailed": "Standardisierung fehlgeschlagen"
   },
   "welcome": {
@@ -71,7 +71,8 @@
     "title": "Schreib dem Entwickler",
     "report": "Fehler melden",
     "desc": "Fehler gefunden oder eine Idee? Schreib direkt eine E-Mail: barkattila@gmail.com",
-    "send": "E-Mail schreiben"
+    "send": "E-Mail schreiben",
+    "copied": "E-Mail-Adresse in die Zwischenablage kopiert"
   },
   "search": {
     "placeholder": "Personen, Dokumente suchen…",
@@ -332,7 +333,8 @@
     "scopeBlood": "Blutlinie",
     "scopeAncestors": "Vorfahren",
     "scopeDescendants": "Nachkommen",
-    "generationsLabel": "Generationen"
+    "generationsLabel": "Generationen",
+    "scopeNeedsRoot": "Dafür wird eine Startperson benötigt (die Wurzel des Baums, oben)."
   },
   "update": {
     "newVersion": "Neue Version",
@@ -1358,7 +1360,21 @@
     "unlinkParentsTitle": "{{name}} von diesem Elternpaar lösen?",
     "unlinkParentsBody": "Nur die Kind–Eltern-Verknüpfung wird entfernt — niemand wird gelöscht.",
     "moreNameFields": "Weitere Namensfelder (Präfix, Suffix)",
-    "moreData": "Weitere Daten"
+    "moreData": "Weitere Daten",
+    "srcYearInferred": "Diese Jahreszahl stammt aus dem zugehörigen Ereignis — die Quelle selbst hat kein Datum.",
+    "showOnMapHistorical": "Auf historischer Karte",
+    "showOnMapModern": "Auf heutiger Karte",
+    "factParticipants": "Mitwirkende",
+    "addParticipant": "Person hinzufügen",
+    "role": "Rolle",
+    "roles": {
+      "midwife": "Hebamme",
+      "doctor": "Arzt",
+      "informant": "Anzeigender",
+      "priest": "Pfarrer",
+      "witness": "Zeuge",
+      "undertaker": "Bestatter"
+    }
   },
   "research": {
     "history": "Rechercheverlauf",
@@ -1630,7 +1646,36 @@
     "signInNow": "Bei FamilySearch anmelden",
     "signingIn": "Anmeldung läuft…",
     "loginOk": "Bei FamilySearch angemeldet.",
-    "signedOutToast": "Von FamilySearch abgemeldet."
+    "signedOutToast": "Von FamilySearch abgemeldet.",
+    "ascLabel": "Vorfahren-Generationen",
+    "ascHelp": "Eltern, Großeltern, Urgroßeltern… nur die direkte Linie mit ihren Ehepartnern. Das wird selten groß, weil alte Linien enden — hier darf der Wert ruhig hoch sein.",
+    "descLabel": "Nachkommen",
+    "descHelp": "Kinder, Enkel und Urenkel der Startperson…",
+    "sideLabel": "Seitenlinien",
+    "sideBadge": "Wird groß",
+    "sideHelp": "Geschwister deiner Vorfahren (1), deren Kinder (2), Cousins (3)… 2 ist das Optimum: So wirkt der Baum vollständig, ohne auszuufern. Ab 3 verdreifacht jede Stufe ungefähr die Zahl der geladenen Personen.",
+    "maxLabel": "Notbremse: höchstens so viele Personen",
+    "maxHelp": "Der Import stoppt hier, auch wenn der Baum größer wäre. Die kostenlose Version erlaubt maximal {{max}} Personen.",
+    "estimate": "Schätzung: etwa {{people}} Personen, ungefähr {{minutes}} Minuten.",
+    "estimateNote": "Nur eine grobe Größenordnung — entscheidend ist die tatsächliche Form deines Baums.",
+    "warnSide2": "Ab Stufe 2 kommen auch Cousins dazu. Das kann den Import um ein Vielfaches vergrößern.",
+    "warnSideMax": "Das ist der höchste erlaubte Wert. Bei einem großen Baum wird das Personenlimit schnell erreicht, und es kommen sehr viele Menschen dazu, mit denen du nichts zu tun hast. Wähle das nur, wenn du wirklich die gesamte Verwandtschaft möchtest.",
+    "warnOverCap": "Diese Einstellung überschreitet das Limit von {{max}} Personen. Der Import stoppt dort — direkte Vorfahren und ihre Familien haben Vorrang, entferntere Zweige entfallen.",
+    "warnLong": "Das wird ein langer Import, ungefähr {{minutes}} Minuten. Du kannst die App weiter benutzen, schließe sie nur nicht.",
+    "warnBackground": "Der Import läuft im Hintergrund, der Baum wächst dabei mit. Du kannst jederzeit stoppen — alles bisher Importierte bleibt erhalten.",
+    "resetDefaults": "Zurück zu den empfohlenen Einstellungen",
+    "probeBtn": "Verbindung testen",
+    "probeRunning": "Test läuft…",
+    "probeOk": "Die Verbindung ist in Ordnung. Der Test lief in {{seconds}} s über {{attempts}} Versuch(e) durch — die App wartet die Drosselung von FamilySearch korrekt ab. Aktuelles Tempo: {{concurrency}} parallele Anfragen, {{spacing}} ms Abstand.",
+    "probeFail": "Der Test ist fehlgeschlagen (HTTP {{status}}). Prüfe dein Netzwerk oder melde dich ab und wieder an.",
+    "recommended": "Empfohlen",
+    "directLineOnly": "Nur die direkte Linie",
+    "sessionExpired": "Deine FamilySearch-Sitzung ist abgelaufen. Melde dich neu an und starte den Import erneut.",
+    "confirmTitle": "So läuft der Import ab",
+    "confirmPhase1": "Zuerst laden die Baumstruktur und die Grunddaten — Quellen, Notizen und Fotos kommen erst ganz am Ende, und das ist der längere Teil.",
+    "confirmPhase2": "Auch die Vereinheitlichung der Ortsnamen läuft nach dem Import — bis dahin kann derselbe Ort in der Statistik vorübergehend mehrfach erscheinen.",
+    "confirmPhase3": "Der Import läuft im Hintergrund: Du kannst die App weiter benutzen, schließe sie nur nicht. Jederzeit stoppbar — alles bisher Geladene bleibt erhalten.",
+    "confirmStart": "Starten"
   },
   "demo": {
     "introTitle": "Willkommen in der TreeMonk-Demo!",

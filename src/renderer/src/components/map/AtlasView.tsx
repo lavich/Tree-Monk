@@ -205,11 +205,15 @@ export function AtlasView(): JSX.Element {
     const d = Number(yearOf(p?.deathDate ?? null)) || null
     // The period map follows the TOP of the window — anchor it to the BIRTH
     // year, so the map shows the world they were born into.
+    //
+    // The BASEMAP is deliberately NOT touched. Which map to land on is the
+    // caller's decision — the profile offers "historical" and "present-day" —
+    // and forcing 'historical' here silently overrode that choice, so the
+    // present-day option could never actually show a present-day map. The era
+    // anchor only means anything on the period map, so it is applied there.
     const era = b ?? (d ? d - 60 : null)
-    useAtlasSettings.getState().set({
-      basemap: 'historical',
-      ...(era ? { yearFrom: null, yearTo: era } : {})
-    })
+    const atlas = useAtlasSettings.getState()
+    if (era && atlas.basemap === 'historical') atlas.set({ yearFrom: null, yearTo: era })
   }, [mapFocusPersonId, mapFocusNonce, people])
 
   const yearBounds = useMemo(() => {

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowDownUp, ChevronDown, MapPin, Plus, Search, SlidersHorizontal, Users, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { ScopePicker, useScopedPeople } from '@/components/common/ScopePicker'
+import type { DashboardScope } from '@/lib/dashboardScope'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -26,6 +28,10 @@ type SortKey = 'name' | 'birthAsc' | 'birthDesc'
 export function PeopleView(): JSX.Element {
   const { t } = useTranslation()
   const people = useAppStore((s) => s.people)
+  // Same four circles as the dashboard — "show me only my bloodline" is the
+  // question people ask of this list too, and the logic already exists.
+  const [scope, setScope] = useState<DashboardScope>('all')
+  const scoped = useScopedPeople(scope)
   const aliases = useAppStore((s) => s.aliases)
   const families = useAppStore((s) => s.families)
   const selectPerson = useAppStore((s) => s.selectPerson)
@@ -62,7 +68,7 @@ export function PeopleView(): JSX.Element {
     const fromY = parseInt(from, 10)
     const toY = parseInt(to, 10)
     const placeN = place.trim().toLowerCase()
-    let list = people.filter((p) => {
+    let list = (scope === 'all' ? people : scoped.people).filter((p) => {
       if (sex && p.sex !== sex) return false
       if (verif === 'yes' && !p.verified) return false
       if (verif === 'no' && p.verified) return false
@@ -115,7 +121,7 @@ export function PeopleView(): JSX.Element {
       })
     }
     return list
-  }, [people, q, aMap, sex, verif, from, to, place, missing, childOf, sort])
+  }, [people, scope, scoped, q, aMap, sex, verif, from, to, place, missing, childOf, sort])
 
   // Windowed rendering: a tree with thousands of people must not mount thousands
   // of avatar cards (and image decodes) at once. Grow as the user scrolls.
@@ -195,6 +201,7 @@ export function PeopleView(): JSX.Element {
               </button>
             )}
           </div>
+          <ScopePicker value={scope} onChange={setScope} />
           <Badge variant="secondary" className="gap-1.5 font-normal tabular-nums">
             <Users className="h-3.5 w-3.5" />
             {t('people.results', { count: filtered.length })}

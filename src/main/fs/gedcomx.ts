@@ -94,8 +94,27 @@ function sexOf(p: GxPerson): 'M' | 'F' | 'U' {
   return 'U'
 }
 
-/** A fact's date: prefer the human-readable original, else the formal value. */
-const factDate = (f?: GxFact): string | null => f?.date?.original ?? f?.date?.formal?.replace(/^\+/, '') ?? null
+/**
+ * A fact's date.
+ *
+ * The contributor's ORIGINAL wording wins by default — it carries nuance a
+ * normalized value throws away ("about 1890", "spring 1912"). But FamilySearch
+ * stores whatever was typed, and plenty of it is not a date any reader can
+ * parse: a compact "19460704" has no four-digit year token, so it arrives in the
+ * tree as an "unparsable date" even though FamilySearch itself shows a perfectly
+ * good "4 July 1946" — because it kept the standardized value alongside.
+ *
+ * So: keep the original when it is legible, and fall back to FamilySearch's own
+ * normalized `formal` value when it is not.
+ */
+const factDate = (f?: GxFact): string | null => {
+  const original = f?.date?.original?.trim() || null
+  // GEDCOM X formal dates read "+1946-07-04"; ranges are "start/end".
+  const formal = f?.date?.formal?.replace(/^\+/, '').split('/')[0].trim() || null
+  const legible = !!original && /\b\d{4}\b/.test(original)
+  if (!legible && formal && /\d{4}/.test(formal)) return formal
+  return original ?? formal
+}
 const factPlace = (f?: GxFact): string | null => f?.place?.original ?? null
 /** A fact's reason statement (FamilySearch stores it as the attribution change
  *  message) — MINUS our own write boilerplate ("Contributed/Updated via
@@ -218,7 +237,7 @@ export function relationshipNodes(doc: GxDocument): FsNode[] {
     const b = refId(r.person2)
     if (!a || !b) continue
     const marr = r.facts?.find((f) => f.type === GX + 'Marriage')
-    out.push({ t: 'f', a, b, md: factDate(marr), mp: factPlace(marr) })
+    out.push({ t: 'f', a, b, md: factDate(marr), mp: factPlace(marr), crid: r.id ?? null })
   }
   for (const cap of doc.childAndParentsRelationships ?? []) {
     const c = refId(cap.child)

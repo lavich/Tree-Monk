@@ -200,7 +200,13 @@ export function IssuesView(): JSX.Element {
       const n = await window.api.names.normalizeSurname(g.variants.map((v) => v.name), canonical)
       await refreshAll()
       await scanSurnames()
-      toast.success(t('issues.surnameNormalized', { count: n, name: canonical }))
+      // Name the forms that were replaced too — after the fact the merge
+      // is otherwise invisible, and it cannot be judged whether the right
+      // variant won.
+      const replaced = g.variants.map((v) => v.name).filter((x) => x !== canonical)
+      toast.success(t('issues.surnameNormalized', { count: n, name: canonical }), {
+        description: replaced.length ? `${replaced.join(', ')} → ${canonical}` : undefined
+      })
     } finally {
       setNormalizing(null)
     }
@@ -213,7 +219,13 @@ export function IssuesView(): JSX.Element {
       const n = await window.api.names.normalizeGivenName(g.variants.map((v) => v.name), canonical)
       await refreshAll()
       await scanGiven()
-      toast.success(t('issues.givenNameNormalized', { count: n, name: canonical }))
+      // Name the forms that were replaced too — after the fact the merge
+      // is otherwise invisible, and it cannot be judged whether the right
+      // variant won.
+      const replaced = g.variants.map((v) => v.name).filter((x) => x !== canonical)
+      toast.success(t('issues.givenNameNormalized', { count: n, name: canonical }), {
+        description: replaced.length ? `${replaced.join(', ')} → ${canonical}` : undefined
+      })
     } finally {
       setNormalizing(null)
     }
@@ -221,6 +233,7 @@ export function IssuesView(): JSX.Element {
 
   const dismissDup = async (c: DuplicateCandidate): Promise<void> => {
     await window.api.duplicates.dismiss(c.aId, c.bId)
+    window.dispatchEvent(new Event('sanity-changed'))
     setDups((prev) => prev?.filter((d) => !(d.aId === c.aId && d.bId === c.bId)) ?? null)
   }
 
@@ -546,6 +559,12 @@ export function IssuesView(): JSX.Element {
           if (key) {
             await window.api.sanity.dismiss(key)
             await scan()
+            // Every open profile and side panel keeps its own copy of the scan,
+            // loaded once when the person was opened. Without this they keep
+            // showing an anomaly the user has just silenced — and because
+            // profile tabs stay mounted in the background, even navigating back
+            // to them would not refresh it.
+            window.dispatchEvent(new Event('sanity-changed'))
           }
         }}
       >
@@ -670,7 +689,10 @@ function NameNormalizeList({
                         : 'border-border/40 text-muted-foreground hover:bg-accent'
                     )}
                   >
-                    {v.name}
+                    {/* The variants that are about to DISAPPEAR are struck
+                        through, so which form survives the merge is obvious
+                        before pressing the button, not only after. */}
+                    <span className={cn(v.name !== canonical && 'line-through decoration-1')}>{v.name}</span>
                     <span className="ml-1 tabular-nums text-muted-foreground/70">{v.count}</span>
                   </button>
                 ))}

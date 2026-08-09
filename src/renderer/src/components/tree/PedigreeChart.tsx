@@ -1032,10 +1032,16 @@ function PersonRow({
           <Users className="h-3.5 w-3.5" />
         </button>
       )}
+      {/* Reveal with `invisible`, NOT `hidden`: the button keeps its slot in the
+          row at all times. Appearing out of nothing on hover used to widen the
+          row's content by 24px, shoving the name and the spouse switcher aside —
+          so the target moved the moment the pointer reached it, worst of all on
+          rows that carry both buttons. `invisible` also blocks clicks while
+          hidden, so nothing can be hit by accident. */}
       <button
         onClick={() => onRecenter(person.id)}
         title="Center here"
-        className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-primary group-hover/row:flex"
+        className="invisible flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-primary group-hover/row:visible"
       >
         <Crosshair className="h-3.5 w-3.5" />
       </button>

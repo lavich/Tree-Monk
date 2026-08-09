@@ -305,6 +305,9 @@ interface CoupleNode {
   md?: string | null
   mp?: string | null
   mn?: string | null
+  /** FamilySearch couple-relationship id — lets the enrichment pass fetch the
+   *  notes written about the COUPLE and send them back as `mn`. */
+  crid?: string | null
 }
 interface ChildNode {
   t: 'c'

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowDownToLine, BadgeCheck, Camera, ChevronDown, ChevronRight, Copy, ExternalLink, Loader2, MapPin, Maximize2, Network, Printer, RefreshCw, Route, Search, Trash2, TreeDeciduous, X } from 'lucide-react'
+import { AlertTriangle, Globe2, Landmark, ArrowDownToLine, BadgeCheck, Camera, ChevronDown, ChevronRight, Copy, ExternalLink, Loader2, MapPin, Maximize2, Network, Printer, RefreshCw, Route, Search, Trash2, TreeDeciduous, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -30,6 +30,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/store/useAppStore'
+import { useAtlasSettings, type AtlasBasemap } from '@/store/useAtlasSettings'
 import { fullName, cn } from '@/lib/utils'
 import { smartNormalizeDate } from '@/lib/smartDate'
 import { canSearchFamilySearch, familySearchPersonUrl, familySearchSearchUrl, isFamilySearchId } from '@/lib/familySearchSearch'
@@ -64,6 +65,14 @@ export function PersonPanel(): JSX.Element | null {
   const focusPersonTree = useAppStore((s) => s.focusPersonTree)
   const openKinship = useAppStore((s) => s.openKinship)
   const openPersonOnMap = useAppStore((s) => s.openPersonOnMap)
+  const setAtlas = useAtlasSettings((s) => s.set)
+  /** Save pending edits, choose the basemap, then jump to the atlas. */
+  const showOn = (basemap: AtlasBasemap): void => {
+    if (!person) return
+    save()
+    setAtlas({ basemap })
+    openPersonOnMap(person.id)
+  }
   const defaultRootId = useAppStore((s) => s.defaultRootId)
   const treeRootId = useAppStore((s) => s.treeRootId)
   const peopleById = useAppStore((s) => s.peopleById)
@@ -117,6 +126,16 @@ export function PersonPanel(): JSX.Element | null {
     if (selectedId) reload()
     else setPerson(null)
   }, [selectedId, reload, personSyncNonce])
+
+  // Anomalies silenced elsewhere must disappear from this panel as well; it
+  // holds its own copy of the scan from when the person was opened.
+  useEffect(() => {
+    const onSanity = (): void => {
+      if (selectedId) void reload()
+    }
+    window.addEventListener('sanity-changed', onSanity)
+    return () => window.removeEventListener('sanity-changed', onSanity)
+  }, [selectedId, reload])
 
   const familyCount = useMemo(() => {
     if (!person) return 0
@@ -393,15 +412,31 @@ export function PersonPanel(): JSX.Element | null {
                   focusPersonTree(person.id)
                 }}
               />
-              <ActionTile
-                icon={<MapPin className="h-4 w-4 shrink-0 text-primary" />}
-                label={t('person.mapShort')}
-                title={t('person.showOnMap')}
-                onClick={() => {
-                  save()
-                  openPersonOnMap(person.id)
-                }}
-              />
+              {/* Same choice as the full profile: a place name is only meaningful
+                  on a map of its own era, so the era is picked here rather than
+                  buried in the atlas panel. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <div>
+                    <ActionTile
+                      icon={<MapPin className="h-4 w-4 shrink-0 text-primary" />}
+                      label={t('person.mapShort')}
+                      title={t('person.showOnMap')}
+                      onClick={() => undefined}
+                    />
+                  </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => showOn('historical')} className="gap-2">
+                    <Landmark className="h-4 w-4 text-muted-foreground" />
+                    {t('person.showOnMapHistorical')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => showOn('auto')} className="gap-2">
+                    <Globe2 className="h-4 w-4 text-muted-foreground" />
+                    {t('person.showOnMapModern')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               {kinship && (
                 <ActionTile
                   icon={<Route className="h-4 w-4 shrink-0 text-primary" />}

@@ -10,6 +10,7 @@ import {
   Citations,
   DismissedIssues,
   Documents,
+  FactParticipants,
   Families,
   Attributes,
   EventParticipants,
@@ -54,6 +55,7 @@ import {
   isSignedIn,
   loginFamilySearchOAuth,
   previewFamilySearch,
+  probeFamilySearchThrottle,
   searchFamilySearch,
   syncPersonFromFamilySearch
 } from './familysearch'
@@ -343,6 +345,15 @@ export function registerIpc(): void {
   ipcMain.handle(Channels.witnesses.add, (_e, ot: WitnessOwnerType, oid: string, wid: string) => Witnesses.add(ot, oid, wid))
   ipcMain.handle(Channels.witnesses.remove, (_e, ot: WitnessOwnerType, oid: string, wid: string) => Witnesses.remove(ot, oid, wid))
 
+  // Role-bearing participants of a vital fact (midwife, officiating priest…).
+  ipcMain.handle(Channels.factParticipants.forFact, (_e, pid: string, tag: string) => FactParticipants.forFact(pid, tag))
+  ipcMain.handle(Channels.factParticipants.add, (_e, pid: string, tag: string, part: string, role: string | null) =>
+    FactParticipants.add(pid, tag, part, role)
+  )
+  ipcMain.handle(Channels.factParticipants.remove, (_e, pid: string, tag: string, part: string) =>
+    FactParticipants.remove(pid, tag, part)
+  )
+
   // Free-form person attributes (FACT/TYPE).
   ipcMain.handle(Channels.attributes.forPerson, (_e, pid: string) => Attributes.forPerson(pid))
   ipcMain.handle(Channels.attributes.create, (_e, pid: string, input) => Attributes.create(pid, input))
@@ -465,6 +476,12 @@ export function registerIpc(): void {
     // launch can detect the interruption and offer the cleanup. Cleared once the
     // import finishes (or is stopped) and the stubs have been cleaned up.
     AppSettings.set('fs_import_pending', '1')
+    // Snapshot the gazetteer BEFORE anything is imported. The incremental
+    // geocoder fills it with RAW place strings while the import streams, so
+    // afterwards "already known" no longer means "already standardized" — only
+    // this snapshot does. Without it the post-import pass skips every new
+    // variant and the same village shows up twice in the statistics.
+    const placesBeforeImport = Places.list().map((p) => p.name)
     // This tree is now a FamilySearch tree — the workspace list shows it, and
     // the FS features gate on it.
     markActiveWorkspaceKind('fs')
@@ -546,17 +563,30 @@ export function registerIpc(): void {
     // collapses spelling/language variants of the same place ("Budapest,
     // Hungary" / "Budapest, Magyarország") to ONE canonical form, then the
     // geocode pass fills in whatever is still missing; finally every open
-    // window is told to refresh. skipKnown keeps re-imports fast.
+    // window is told to refresh. The pre-import snapshot keeps re-imports fast.
     void (async () => {
       try {
         // Most places were already resolved by the incremental queue while the
         // import streamed; wait for it to drain so the two passes never look up
         // the same name twice, then finish whatever is left.
         await waitForIncomingGeocode()
-        await standardizePlaces(() => undefined, { skipKnown: true })
+        await standardizePlaces(() => undefined, { skipNames: placesBeforeImport })
         await geocodePlaces(() => undefined)
       } catch {
         /* best-effort background job */
+      }
+      notifyDataChanged()
+    })()
+    // Pull the FamilySearch photos down to local files in the background. Until
+    // now this ran only after a GEDCOM import, so FS pictures stayed as remote
+    // URLs and were fetched one by one whenever a profile happened to be opened
+    // — slow on every view, and useless offline. Progress reuses the existing
+    // download indicator.
+    void (async () => {
+      try {
+        await downloadRemoteMedia((p) => safeSend(e.sender, Channels.media.downloadProgress, p))
+      } catch {
+        /* best-effort: a missing photo must never fail the import */
       }
       notifyDataChanged()
     })()
@@ -584,6 +614,7 @@ export function registerIpc(): void {
   ipcMain.handle(Channels.familysearch.signOut, () => forgetCreds())
   ipcMain.handle(Channels.familysearch.signedIn, () => isSignedIn())
   ipcMain.handle(Channels.familysearch.configured, () => isFamilySearchConfigured())
+  ipcMain.handle(Channels.familysearch.throttleProbe, () => probeFamilySearchThrottle())
   ipcMain.handle(Channels.familysearch.syncPreview, (_e, personId: string) => familySearchSyncPreview(personId))
   ipcMain.handle(Channels.familysearch.listTrees, () => listFamilySearchTrees())
   ipcMain.handle(Channels.familysearch.lookupPerson, (_e, fid: string, treeId?: string) => lookupFsPerson(fid, treeId))
@@ -801,7 +832,8 @@ export function registerIpc(): void {
       lon: p.lon,
       placeType: p.place_type ?? null,
       parentName: p.parent_name ?? null,
-      govId: p.gov_id ?? null
+      govId: p.gov_id ?? null,
+      canonical: p.canonical ?? null
     }))
   )
   ipcMain.handle(
@@ -840,7 +872,7 @@ export function registerIpc(): void {
     return { path: res.filePath }
     }
   )
-  ipcMain.handle(Channels.site.export, async (e, lang: string) => {
+  ipcMain.handle(Channels.site.export, async (e, lang: string, personIds?: string[]) => {
     const win = BrowserWindow.fromWebContents(e.sender) ?? undefined!
     const res = await dialog.showSaveDialog(win, {
       title: 'Export website',
@@ -849,10 +881,10 @@ export function registerIpc(): void {
       properties: ['showOverwriteConfirmation', 'createDirectory']
     })
     if (res.canceled || !res.filePath) return null
-    exportSite(res.filePath, lang)
+    exportSite(res.filePath, lang, personIds)
     return { path: res.filePath }
   })
-  ipcMain.handle(Channels.site.exportIndexes, async (e, lang: string) => {
+  ipcMain.handle(Channels.site.exportIndexes, async (e, lang: string, personIds?: string[]) => {
     const win = BrowserWindow.fromWebContents(e.sender) ?? undefined!
     const res = await dialog.showSaveDialog(win, {
       title: 'Export indexes',
@@ -861,7 +893,7 @@ export function registerIpc(): void {
       properties: ['showOverwriteConfirmation', 'createDirectory']
     })
     if (res.canceled || !res.filePath) return null
-    exportIndexes(res.filePath, lang)
+    exportIndexes(res.filePath, lang, personIds)
     return { path: res.filePath }
   })
   // Bulk person import from CSV (delimiter + column auto-detection).

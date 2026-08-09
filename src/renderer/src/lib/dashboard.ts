@@ -53,6 +53,10 @@ export interface DashboardComputeOptions {
   /** Person ids that have an occupation (stored in the occupations table, not the
    *  people.occupation column) — needed for accurate completeness scoring. */
   occPersonIds?: Set<string>
+  /** Raw place spelling → canonical form (from the gazetteer). Records keep
+   *  their raw text on purpose; this map is what merges "Csány, Hungary" and
+   *  "Csány, Magyarország" into ONE statistics bucket. */
+  placeCanonical?: ReadonlyMap<string, string>
 }
 
 const DEFAULT_TOP_N = 8
@@ -93,6 +97,8 @@ export function computeDashboard(
   families: Family[],
   opts: DashboardComputeOptions = {}
 ): DashboardStats {
+  /** Resolve a raw place spelling to its canonical bucket. */
+  const canonPlace = (raw: string): string => opts.placeCanonical?.get(raw) ?? raw
   const limit = Math.max(1, Math.round(opts.topN ?? DEFAULT_TOP_N))
   const isDeceased = (p: Person): boolean => !!(p.deceased || p.deathDate)
 
@@ -146,7 +152,7 @@ export function computeDashboard(
     const g = p.givenName.trim()
     if (g) bump(givenNames, g)
     const bp = (p.birthPlace ?? '').trim()
-    if (bp) bump(birthPlaces, bp)
+    if (bp) bump(birthPlaces, canonPlace(bp))
     const dp = (p.deathPlace ?? '').trim()
     if (dp) bump(deathPlaces, dp)
     const oc = (p.occupation ?? '').trim()
@@ -177,7 +183,7 @@ export function computeDashboard(
     { key: 'occupation', have: have(hasOccupation), total: people.length }
   ]
 
-  const records = computeInsights(people, families).filter((i) => RECORD_KEYS.has(i.key))
+  const records = computeInsights(people, families, canonPlace).filter((i) => RECORD_KEYS.has(i.key))
 
   return {
     total: people.length,

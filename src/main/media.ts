@@ -184,7 +184,11 @@ export async function downloadRemoteMedia(
       try {
         const res = await fetch(doc.filePath, {
           headers: { 'User-Agent': 'TreeMonk', Accept: 'image/*', ...mediaAuthHeaders(doc.filePath) },
-          redirect: 'follow'
+          redirect: 'follow',
+          // Photos are large, so the ceiling is generous — but it must exist:
+          // one stalled download would otherwise pin a worker forever and the
+          // media pass would never report as finished.
+          signal: AbortSignal.timeout(120_000)
         })
         if (res.ok) {
           const buf = Buffer.from(await res.arrayBuffer())

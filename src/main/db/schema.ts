@@ -96,6 +96,24 @@ CREATE TABLE IF NOT EXISTS event_participants (
 );
 CREATE INDEX IF NOT EXISTS idx_event_participants_person ON event_participants(person_id);
 
+--- Participants of a VITAL fact (birth, christening, death, burial) with a
+--- free-form role: the midwife at a birth, the priest who performed the
+--- christening or the burial, the doctor who certified a death.
+---
+--- These people used to be attachable only to a custom EVENT, which is why
+--- users ended up typing them into the free-text reason field of the vital fact
+--- instead. fact_tag is the GEDCOM tag of the fact they belong to (BIRT / CHR /
+--- DEAT / BURI), so one person can have a different midwife and priest.
+CREATE TABLE IF NOT EXISTS fact_participants (
+  person_id       TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  fact_tag        TEXT NOT NULL,
+  participant_id  TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+  role            TEXT,
+  ordinal         INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (person_id, fact_tag, participant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_fact_participants_person ON fact_participants(participant_id);
+
 --- Free-form person attributes (GEDCOM FACT/TYPE): height, DNA haplogroup,
 --- service number… — anything that isn't a dated life event.
 CREATE TABLE IF NOT EXISTS attributes (
@@ -156,7 +174,9 @@ CREATE TABLE IF NOT EXISTS places (
   lon             REAL NOT NULL,
   place_type      TEXT,                     -- village/town/district/county/country/…
   parent_name     TEXT,                     -- next level up in the place hierarchy
-  gov_id          TEXT                      -- GOV id (gov.genealogy.net)
+  gov_id          TEXT,                     -- GOV id (gov.genealogy.net)
+  canonical       TEXT                      -- canonical form of this spelling; records keep their RAW text,
+                                            -- stats/maps group through this pointer instead of rewriting
 );
 
 -- App settings (key/value) — e.g. default_root_person_id

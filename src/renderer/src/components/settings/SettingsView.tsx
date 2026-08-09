@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { ExportSiteDialog } from '@/components/common/ExportSiteDialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import { FsSolutionBadge, FsTrademarkNotice } from '@/components/common/FsBrand'
@@ -185,6 +186,8 @@ function Row({
 type SectionId = 'appearance' | 'data' | 'io' | 'api' | 'news' | 'help' | 'danger'
 
 export function SettingsView(): JSX.Element {
+  // Which of the two website exports is open (null = neither).
+  const [siteExport, setSiteExport] = useState<'site' | 'index' | null>(null)
   const { t, i18n } = useTranslation()
   const refreshAll = useAppStore((s) => s.refreshAll)
   const {
@@ -460,29 +463,13 @@ export function SettingsView(): JSX.Element {
                   </Row>
                 )}
                 <Row icon={Globe} title={t('settings.siteExport')} desc={t('settings.siteExportDesc')}>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-2"
-                    onClick={async () => {
-                      const res = await window.api.site.export(i18n.language)
-                      if (res) toast.success(t('settings.siteExportDone', { path: res.path }))
-                    }}
-                  >
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => setSiteExport('site')}>
                     <Globe className="h-4 w-4" />
                     {t('settings.siteExportBtn')}
                   </Button>
                 </Row>
                 <Row icon={ListOrdered} title={t('settings.indexExport')} desc={t('settings.indexExportDesc')}>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-2"
-                    onClick={async () => {
-                      const res = await window.api.site.exportIndexes(i18n.language)
-                      if (res) toast.success(t('settings.siteExportDone', { path: res.path }))
-                    }}
-                  >
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => setSiteExport('index')}>
                     <ListOrdered className="h-4 w-4" />
                     {t('settings.indexExportBtn')}
                   </Button>
@@ -562,6 +549,11 @@ export function SettingsView(): JSX.Element {
       </ConfirmDialog>
 
       <ExportGedcomDialog open={exportOpen} onOpenChange={setExportOpen} />
+      <ExportSiteDialog
+        open={siteExport !== null}
+        onOpenChange={(v) => !v && setSiteExport(null)}
+        mode={siteExport ?? 'site'}
+      />
     </ScrollArea>
   )
 }

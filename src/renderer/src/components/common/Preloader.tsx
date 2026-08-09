@@ -1,7 +1,9 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, type Transition } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { BRAND, BRAND_GRADIENT } from '@/lib/brand'
+import { PRODUCT_EDITION } from '@shared/product'
+import { FsSolutionBadge } from '@/components/common/FsBrand'
 
 /**
  * The launch splash — calm, premium, and it opens.
@@ -54,6 +56,22 @@ function makeLeaf(angleDeg: number, len: number, w: number): { fill: string; vei
 }
 
 export function Preloader(): JSX.Element {
+  // The FamilySearch Solutions logo appears only when an AppKey is actually
+  // present — a build without the integration must never show its branding.
+  const [fsOn, setFsOn] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void window.api.familysearch
+      .configured()
+      .then((ok) => {
+        if (alive) setFsOn(ok)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
+
   const { t } = useTranslation()
 
   const { sprout, crown } = useMemo(() => {
@@ -168,6 +186,17 @@ export function Preloader(): JSX.Element {
           </motion.div>
         </div>
 
+        {/* Edition line. The wordmark stays the brand; the edition sits under it,
+            quieter, so the two builds are told apart at a glance. */}
+        <motion.div
+          className="mt-1 text-[15px] font-semibold tracking-[0.18em] text-[#0d7a6e]/70"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.9, duration: 0.6 }}
+        >
+          {PRODUCT_EDITION.toUpperCase()}
+        </motion.div>
+
         {/* Tagline. */}
         <motion.p
           className="mt-2 text-[13px] font-medium tracking-wide text-[#6b7a75]"
@@ -193,6 +222,21 @@ export function Preloader(): JSX.Element {
             transition={{ delay: 1.25, duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
           />
         </motion.div>
+
+        {/* The official FamilySearch Solutions Program logo. The artwork carries
+            its own wording, so no label is added; it sits below and smaller than
+            the TreeMonk wordmark, which stays dominant. Shown only when the build
+            actually has an AppKey — a keyless build must not display FS branding. */}
+        {fsOn && (
+          <motion.div
+            className="mt-8"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.45, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <FsSolutionBadge height={52} />
+          </motion.div>
+        )}
       </div>
     </motion.div>
   )

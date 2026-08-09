@@ -22,7 +22,8 @@ import {
   ResearchLogs,
   Sources,
   Todos,
-  Witnesses
+  Witnesses,
+  FactParticipants
 } from '../main/db/repo'
 import { buildTree } from '../main/db/tree'
 import { buildPedigree, buildPersonDescendants, buildUnionCouple } from '../main/db/pedigree'
@@ -168,6 +169,11 @@ export function createDemoApi(): TreeMonkApi {
     },
     witnesses: {
       forOwner: async (ot, oid) => Witnesses.forOwner(ot, oid),
+      add: async () => blocked(),
+      remove: async () => blocked()
+    },
+    factParticipants: {
+      forFact: async (pid, tag) => FactParticipants.forFact(pid, tag),
       add: async () => blocked(),
       remove: async () => blocked()
     },
@@ -356,6 +362,14 @@ export function createDemoApi(): TreeMonkApi {
       listTrees: async () => [{ id: 'GLOBAL', name: 'Family Tree', kind: 'global' as const }],
       lookupPerson: async () => ({ found: false }),
       normalizeDate: async () => null,
+      throttleProbe: async () => ({
+        ok: false,
+        status: 0,
+        attempts: 0,
+        waitedMs: 0,
+        retryAfterMs: null,
+        pace: { concurrency: 0, spacingMs: 0, processingMsLastMinute: 0, requestsLastMinute: 0 }
+      }),
       getSettings: async () => null,
       onStatus: unsubscribe,
       onNode: unsubscribe,
@@ -382,7 +396,8 @@ export function createDemoApi(): TreeMonkApi {
           lon: p.lon,
           placeType: p.place_type ?? null,
           parentName: p.parent_name ?? null,
-          govId: p.gov_id ?? null
+          govId: p.gov_id ?? null,
+          canonical: p.canonical ?? null
         })),
       setPlaceMeta: async () => blocked(),
       geocodeAll: async () => blocked(),
@@ -496,6 +511,11 @@ export function createLocalApi(): TreeMonkApi {
       ...base.witnesses,
       add: async (ot, oid, wid) => Witnesses.add(ot, oid, wid),
       remove: async (ot, oid, wid) => Witnesses.remove(ot, oid, wid)
+    },
+    factParticipants: {
+      ...base.factParticipants,
+      add: async (pid, tag, part, role) => FactParticipants.add(pid, tag, part, role),
+      remove: async (pid, tag, part) => FactParticipants.remove(pid, tag, part)
     },
     attributes: {
       ...base.attributes,

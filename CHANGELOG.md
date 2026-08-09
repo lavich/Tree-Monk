@@ -2,6 +2,63 @@
 
 All notable changes to TreeMonk are documented here.
 
+## [1.9.0]
+
+### Added
+- **Direct-line fast path**: with no descendants and no side branches the
+  import pulls the pedigree via `/tree/ancestry` (8 generations per request,
+  ahnentafel-numbered, multi-hop above that) instead of crawling person by
+  person — the walk phase measured ~50× faster, the whole import roughly 2×.
+  Marriage facts and parent links ride along on each person's own record.
+- **Place mapping layer**: records are never rewritten; every raw place
+  spelling keeps its own gazetteer row plus a `canonical` pointer
+  (`places.canonical`), and the statistics group through it. Standardize
+  builds mappings only. Bare one-word names get the tree's dominant region as
+  a geocoding hint and are never text-"enriched".
+- **Fact participants** (`fact_participants` table + IPC + UI): midwife,
+  priest, doctor etc. with a free-text role on BIRT/CHR/DEAT/BURI; godparents
+  moved into the christening block.
+- **Couple notes import** from FamilySearch (`couple-relationships/{id}/notes`
+  in the enrichment pass) and from GEDCOM FAM-level NOTEs.
+- **Pre-import phase notice** (photos/sources arrive last, places unify last),
+  scope filters (bloodline/ancestors/descendants) on the People page and the
+  website/index exports, historical vs present-day map choice on the profile,
+  record cards labelled, edition name + FS Solutions logo on the splash.
+- Adaptive request pacing against FamilySearch's processing-time budget, with
+  a live throttle self-test button; request timeouts everywhere (60s API /
+  30s token / 120s media) so an import can never hang forever.
+
+### Fixed
+- **Replace-mode import wiped the database BEFORE authentication** — an
+  expired session in replace mode destroyed the tree and imported nothing.
+  The wipe now runs only after the session proves alive; `isSignedIn()`
+  honours the token's 24h lifetime and a pre-import probe fails cleanly.
+- **Place corruption**: standardization accepted the geocoder's top hit
+  unchecked ("Póstelek, Békés" → Somogy; bare "Russland" → a Scottish
+  settlement via the FS Places authority's variant matching). Multi-part
+  names must not contradict the source; bare names are never rewritten.
+- Post-import standardization skipped everything the incremental geocoder had
+  just written (gazetteer snapshot taken before the import now).
+- Compact dates ("19460704") parse everywhere (import falls back to the
+  formal value, display, sanity, manual input mask).
+- Unindexed FamilySearch sources show a derived ~year from their tagged
+  event, validated against the register volume's year range.
+- The fast path records known relatives, so the change watcher no longer
+  flags every imported person with "new relatives".
+- Sanity: sibling same-name rule removed (necronyms), death registration
+  after death not flagged, dismissed anomalies clear from every panel live.
+- UI: import dialog rebuilt (sliders, presets, live estimate, two columns,
+  pinned FS-brand footer), sticky profile tab strip opaque, pedigree
+  crosshair no longer shifts the row, atlas no longer force-switches the
+  basemap when jumping to a person.
+
+### Technical
+- `places.canonical` column (idempotent migration), `PlaceInfo.canonical`
+  through IPC and the web shim; `standardizeAll` keeps its IPC shape with
+  `recordsUpdated` permanently 0.
+- FamilySearch access tokens carry `issuedAt`; session file format extended
+  backward-compatibly.
+
 ## [1.8.17]
 
 ### Added

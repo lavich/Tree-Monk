@@ -9,6 +9,7 @@ import {
   Baby,
   BadgeCheck,
   Camera,
+  ChevronDown,
   Copy,
   Droplets,
   ExternalLink,
@@ -16,6 +17,8 @@ import {
   Flower2,
   Loader2,
   Lock,
+  Globe2,
+  Landmark,
   MapPin,
   MoreHorizontal,
   Network,
@@ -65,11 +68,13 @@ import { PersonAttributes } from '@/components/person/PersonAttributes'
 import { GivenNamesEditor } from '@/components/person/GivenNamesEditor'
 import { PersonParticipations } from '@/components/person/PersonParticipations'
 import { FactSources, VitalNote } from '@/components/person/FactSources'
+import { FactParticipants } from '@/components/person/FactParticipants'
 import { QualityRing } from '@/components/common/QualityRing'
 import { personQuality } from '@/lib/completeness'
 import { canSearchFamilySearch, familySearchPersonUrl, familySearchSearchUrl, isFamilySearchId } from '@/lib/familySearchSearch'
 import { PersonAliases, NameOriginLine } from '@/components/person/PersonAliases'
 import { useAppStore } from '@/store/useAppStore'
+import { useAtlasSettings, type AtlasBasemap } from '@/store/useAtlasSettings'
 import { useSettings } from '@/store/useSettings'
 import { useFsMode } from '@/hooks/useFsMode'
 import { cn, fullName, yearOf } from '@/lib/utils'
@@ -93,6 +98,14 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
   const focusPersonTree = useAppStore((s) => s.focusPersonTree)
   const openKinship = useAppStore((s) => s.openKinship)
   const openPersonOnMap = useAppStore((s) => s.openPersonOnMap)
+  const setAtlas = useAtlasSettings((s) => s.set)
+  /** Save pending edits, choose the basemap, then jump to the atlas. */
+  const showOn = (basemap: AtlasBasemap): void => {
+    if (!person) return
+    void save()
+    setAtlas({ basemap })
+    openPersonOnMap(person.id)
+  }
   const defaultRootId = useAppStore((s) => s.defaultRootId)
   const treeRootId = useAppStore((s) => s.treeRootId)
   const peopleById = useAppStore((s) => s.peopleById)
@@ -144,6 +157,15 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
 
   useEffect(() => {
     void reload()
+  }, [reload])
+
+  // Marking an anomaly as a false positive elsewhere must clear it here too —
+  // this tab may have been mounted long before, and it keeps its own copy of
+  // the scan result.
+  useEffect(() => {
+    const onSanity = (): void => void reload()
+    window.addEventListener('sanity-changed', onSanity)
+    return () => window.removeEventListener('sanity-changed', onSanity)
   }, [reload])
 
   useEffect(() => {
@@ -405,18 +427,33 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
               <Network className="h-3.5 w-3.5" />
               {t('person.showTree')}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 border-primary/25 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
-              onClick={() => {
-                void save()
-                openPersonOnMap(person.id)
-              }}
-            >
-              <MapPin className="h-3.5 w-3.5" />
-              {t('person.showOnMap')}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-primary/25 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary"
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  {t('person.showOnMap')}
+                  <ChevronDown className="h-3 w-3 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              {/* Which basemap to land on. A place name only means something on a
+                  map of its own era — borders and settlement names moved a lot —
+                  so the historical basemap is offered right where the person is,
+                  instead of being buried in the atlas panel. */}
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => showOn('historical')} className="gap-2">
+                  <Landmark className="h-4 w-4 text-muted-foreground" />
+                  {t('person.showOnMapHistorical')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => showOn('auto')} className="gap-2">
+                  <Globe2 className="h-4 w-4 text-muted-foreground" />
+                  {t('person.showOnMapModern')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {rootPerson && (
               <Button
                 variant="outline"
@@ -527,7 +564,11 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
             counted, the active segment tinted in the app's selection teal and
             slid into place — kept sticky so it never scrolls out of reach. */}
         <Tabs value={tab} onValueChange={setTab} className="mt-5 pb-12">
-          <TabsList className="sticky top-2 z-20 h-auto">
+          {/* Sticky chrome may NOT be see-through: `.glass-subtle` alone leans on
+              the backdrop blur, and the big section headings scrolling underneath
+              still read through it. An opaque background on top of the blur keeps
+              the strip legible at every scroll position. */}
+          <TabsList className="sticky top-2 z-20 h-auto bg-background/95">
             {(
               [
                 { value: 'overview', icon: UserRound, label: t('person.overview'), count: 0 },
@@ -718,6 +759,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                         </Field>
                       </div>
                       <VitalNote label={t('person.birth')} value={person.birthNote ?? ''} onSave={(v) => saveNote('birthNote', v)} />
+                      <FactParticipants personId={person.id} factTag="BIRT" roleKeys={['midwife', 'doctor', 'informant']} />
                     </VitalBlock>
 
                     <VitalBlock
@@ -754,6 +796,11 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                         </Field>
                       </div>
                       <VitalNote label={t('person.christening')} value={person.christeningNote ?? ''} onSave={(v) => saveNote('christeningNote', v)} />
+                      {/* Godparents live HERE, at the christening — they were a
+                          separate block further down the page, so people ended up
+                          typing them into the free-text note instead. */}
+                      <PersonGodparents person={person} compact />
+                      <FactParticipants personId={person.id} factTag="CHR" roleKeys={['priest', 'witness']} />
                     </VitalBlock>
 
                     <VitalBlock
@@ -799,6 +846,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                         </label>
                       </div>
                       <VitalNote label={t('person.death')} value={person.deathNote ?? ''} onSave={(v) => saveNote('deathNote', v)} />
+                      <FactParticipants personId={person.id} factTag="DEAT" roleKeys={['doctor', 'informant']} />
                     </VitalBlock>
 
                     <VitalBlock
@@ -821,6 +869,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                         </Field>
                       </div>
                       <VitalNote label={t('person.burial')} value={person.burialNote ?? ''} onSave={(v) => saveNote('burialNote', v)} />
+                      <FactParticipants personId={person.id} factTag="BURI" roleKeys={['priest', 'undertaker']} />
                     </VitalBlock>
                   </div>
                 </Card>
@@ -876,7 +925,9 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
               <PersonFamily person={person} />
             </Card>
             <Card>
-              <PersonGodparents person={person} />
+              {/* Godparents now live in the christening block, where they belong;
+                  what remains here is the "godchild of…" side of the relation. */}
+              <PersonGodparents person={person} godchildrenOnly />
             </Card>
             <Card>
               <PersonWitnesses

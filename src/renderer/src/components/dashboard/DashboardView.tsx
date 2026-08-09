@@ -232,9 +232,20 @@ export function DashboardView(): JSX.Element {
     () => scopePeople(people, families, { scope: cfg.scope, rootId: effectiveRootId, includeSpouses: cfg.includeSpouses }),
     [people, families, cfg.scope, effectiveRootId, cfg.includeSpouses]
   )
+  // Raw spelling → canonical place, from the gazetteer. Built once per mount;
+  // records keep their raw text, only the grouping uses this.
+  const [placeCanonical, setPlaceCanonical] = useState<Map<string, string>>(new Map())
+  useEffect(() => {
+    void window.api.geo.listPlaces().then((rows) => {
+      const m = new Map<string, string>()
+      for (const r of rows) if (r.canonical && r.canonical !== r.name) m.set(r.name, r.canonical)
+      setPlaceCanonical(m)
+    })
+  }, [])
+
   const stats = useMemo(
-    () => computeDashboard(scoped.people, scoped.families, { topN: 15, occPersonIds }),
-    [scoped, occPersonIds]
+    () => computeDashboard(scoped.people, scoped.families, { topN: 15, occPersonIds, placeCanonical }),
+    [scoped, occPersonIds, placeCanonical]
   )
   const generations = useMemo(() => maxGenerations(scoped.people, scoped.families), [scoped])
   const migration = useMemo(() => {
@@ -374,6 +385,12 @@ export function DashboardView(): JSX.Element {
                         className={cn('flex items-start gap-2 rounded-xl border border-border bg-background p-3 text-left', r.personId && 'hover:border-primary/40 hover:shadow-sm')}>
                         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10"><Icon className="h-4 w-4 text-primary" /></span>
                         <div className="min-w-0">
+                          {/* WHICH record this is. Without it the panel was a wall of
+                              names and numbers — "István Jáger 88 év" tells you
+                              nothing about why he is on the list. */}
+                          <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {t(`tree.insights.${r.key}`, { defaultValue: r.key })}
+                          </p>
                           <p className="truncate text-sm font-semibold">{r.value}</p>
                           {r.sub && <p className="truncate text-[11px] text-muted-foreground">{r.years ? t('dashboard.yearsN', { count: Number(r.sub) || 0 }) : r.sub}</p>}
                         </div>

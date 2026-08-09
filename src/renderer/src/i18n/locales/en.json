@@ -44,13 +44,13 @@
       "other": "Other"
     },
     "standardizeTitle": "Standardize places",
-    "standardizeDesc": "Rewrite every place name to its canonical form (merges duplicates like “…Hungary” / “…Magyarország”).",
+    "standardizeDesc": "Links spelling variants of the same place (e.g. “Hungary” / “Magyarország”) so statistics and the map treat them as one. Your data is never rewritten — every record keeps what the source says.",
     "standardizeBtn": "Standardize",
     "standardizing": "Standardizing places…",
     "standardizingHint": "Looking up canonical place names…",
     "progress": "{{done}}/{{total}} places · {{changed}} normalized",
-    "standardizeDone": "Places normalized on {{count}} records",
-    "standardizeNone": "All places are already standard",
+    "standardizeDone": "{{count}} place variants linked",
+    "standardizeNone": "All place names are already linked",
     "standardizeFailed": "Standardization failed"
   },
   "welcome": {
@@ -71,7 +71,8 @@
     "title": "Write to the developer",
     "report": "Report a bug",
     "desc": "Found a bug or have an idea? E-mail the developer directly: barkattila@gmail.com",
-    "send": "Write an e-mail"
+    "send": "Write an e-mail",
+    "copied": "Email address copied to the clipboard"
   },
   "search": {
     "placeholder": "Search people, documents…",
@@ -332,7 +333,8 @@
     "scopeBlood": "Bloodline",
     "scopeAncestors": "Ancestors",
     "scopeDescendants": "Descendants",
-    "generationsLabel": "Generations"
+    "generationsLabel": "Generations",
+    "scopeNeedsRoot": "This needs a starting person (the tree's root, set at the top)."
   },
   "update": {
     "newVersion": "New version",
@@ -1361,7 +1363,21 @@
     "unlinkParentsTitle": "Unlink {{name}} from this parent pair?",
     "unlinkParentsBody": "Only the child–parents link is removed — no person is deleted.",
     "moreNameFields": "More name fields (prefix, suffix)",
-    "moreData": "More data"
+    "moreData": "More data",
+    "srcYearInferred": "This year comes from the related event — the source itself carries no date.",
+    "showOnMapHistorical": "On a historical map",
+    "showOnMapModern": "On a present-day map",
+    "factParticipants": "People involved",
+    "addParticipant": "Add person",
+    "role": "Role",
+    "roles": {
+      "midwife": "midwife",
+      "doctor": "doctor",
+      "informant": "informant",
+      "priest": "minister",
+      "witness": "witness",
+      "undertaker": "undertaker"
+    }
   },
   "research": {
     "history": "Research history",
@@ -1633,7 +1649,36 @@
     "signInNow": "Sign in to FamilySearch",
     "signingIn": "Signing in…",
     "loginOk": "Signed in to FamilySearch.",
-    "signedOutToast": "Signed out of FamilySearch."
+    "signedOutToast": "Signed out of FamilySearch.",
+    "ascLabel": "Ancestor generations",
+    "ascHelp": "Parents, grandparents, great-grandparents… the direct line only, with their spouses. This rarely gets big because old lines run out — feel free to go high.",
+    "descLabel": "Descendants",
+    "descHelp": "The starting person's children, grandchildren, great-grandchildren…",
+    "sideLabel": "Side branches",
+    "sideBadge": "Gets big",
+    "sideHelp": "Your ancestors' siblings (1), their children (2), cousins (3)… 2 is the sweet spot: it makes the tree feel complete without running away. At 3 every level roughly triples how many people come in.",
+    "maxLabel": "Safety stop: at most this many people",
+    "maxHelp": "The import stops here even if the tree is bigger. The free edition allows up to {{max}} people.",
+    "estimate": "Estimate: about {{people}} people, roughly {{minutes}} minutes.",
+    "estimateNote": "A rough order of magnitude only — the real shape of your tree decides.",
+    "warnSide2": "At level 2 cousins are included as well. This can multiply the size of the import several times over.",
+    "warnSideMax": "This is the highest value allowed. On a large tree it will easily reach the person limit and bring in a great many people you have no connection to. Only choose it if you really do want the entire extended family.",
+    "warnOverCap": "These settings go past the limit of {{max}} people. The import will stop there — your direct ancestors and their families come first, more distant branches are left out.",
+    "warnLong": "This will be a long import, roughly {{minutes}} minutes. You can keep using the app meanwhile, just don't close it.",
+    "warnBackground": "The import runs in the background and the tree grows as it goes. You can stop it at any time — everything imported so far is kept.",
+    "resetDefaults": "Back to the recommended settings",
+    "probeBtn": "Test connection",
+    "probeRunning": "Testing…",
+    "probeOk": "Connection is healthy. The test passed in {{seconds}} s over {{attempts}} attempt(s) — the app correctly waits out FamilySearch's throttling. Current pace: {{concurrency}} parallel requests, {{spacing}} ms apart.",
+    "probeFail": "The test failed (HTTP {{status}}). Check your network, or sign out and back in.",
+    "recommended": "Recommended",
+    "directLineOnly": "Direct line only",
+    "sessionExpired": "Your FamilySearch session has expired. Sign in again, then restart the import.",
+    "confirmTitle": "How the import works",
+    "confirmPhase1": "The tree structure and core facts download first — sources, notes and photos arrive only at the very end, and that is the longer part.",
+    "confirmPhase2": "Place-name unification also runs after the import — until then the same town can temporarily appear more than once in the statistics.",
+    "confirmPhase3": "The import runs in the background: keep using the app, just don't close it. You can stop any time — everything imported so far is kept.",
+    "confirmStart": "Start"
   },
   "demo": {
     "introTitle": "Welcome to the TreeMonk demo!",

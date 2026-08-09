@@ -109,6 +109,13 @@ const api: TreeMonkApi = {
   collaborations: {
     listForPerson: (pid) => ipcRenderer.invoke(Channels.collaborations.listForPerson, pid)
   },
+  factParticipants: {
+    forFact: (pid: string, tag: string) => ipcRenderer.invoke(Channels.factParticipants.forFact, pid, tag),
+    add: (pid: string, tag: string, participantId: string, role: string | null) =>
+      ipcRenderer.invoke(Channels.factParticipants.add, pid, tag, participantId, role),
+    remove: (pid: string, tag: string, participantId: string) =>
+      ipcRenderer.invoke(Channels.factParticipants.remove, pid, tag, participantId)
+  },
   witnesses: {
     forOwner: (ot, oid) => ipcRenderer.invoke(Channels.witnesses.forOwner, ot, oid),
     add: (ot, oid, wid) => ipcRenderer.invoke(Channels.witnesses.add, ot, oid, wid),
@@ -218,6 +225,7 @@ const api: TreeMonkApi = {
   familysearch: {
     login: (lang) => ipcRenderer.invoke(Channels.familysearch.login, lang),
     configured: () => ipcRenderer.invoke(Channels.familysearch.configured),
+    throttleProbe: () => ipcRenderer.invoke(Channels.familysearch.throttleProbe),
     signedIn: () => ipcRenderer.invoke(Channels.familysearch.signedIn),
     signOut: () => ipcRenderer.invoke(Channels.familysearch.signOut),
     syncPreview: (personId) => ipcRenderer.invoke(Channels.familysearch.syncPreview, personId),

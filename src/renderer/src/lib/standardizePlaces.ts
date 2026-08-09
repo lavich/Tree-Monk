@@ -22,8 +22,8 @@ export async function runPlaceStandardization(
   try {
     const res = await window.api.geo.standardizeAll(onlyNew)
     await onDone?.()
-    if (res.recordsUpdated > 0) {
-      toast.success(t('places.standardizeDone', { count: res.recordsUpdated }), { id })
+    if (res.canonicalised > 0) {
+      toast.success(t('places.standardizeDone', { count: res.canonicalised }), { id })
     } else {
       toast.success(t('places.standardizeNone'), { id })
     }

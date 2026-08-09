@@ -37,7 +37,17 @@ function PersonChip({
  * that person. Add picks from EXISTING people. Also lists, if any, the people
  * this person is a godparent OF.
  */
-export function PersonGodparents({ person }: { person: Person }): JSX.Element {
+export function PersonGodparents({
+  person,
+  compact = false,
+  godchildrenOnly = false
+}: {
+  person: Person
+  /** Inside the christening block: godparents only, no "godchild of" section. */
+  compact?: boolean
+  /** The mirror view: ONLY the people this person is a godparent to. */
+  godchildrenOnly?: boolean
+}): JSX.Element {
   const { t } = useTranslation()
   const peopleById = useAppStore((s) => s.peopleById)
   const selectPerson = useAppStore((s) => s.selectPerson)
@@ -78,6 +88,7 @@ export function PersonGodparents({ person }: { person: Person }): JSX.Element {
 
   return (
     <div className="space-y-2">
+      {!godchildrenOnly && (
       <div className="flex items-center justify-between">
         <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <HeartHandshake className="h-3.5 w-3.5" /> {t('godparents.title')}
@@ -90,7 +101,9 @@ export function PersonGodparents({ person }: { person: Person }): JSX.Element {
         </button>
       </div>
 
-      {godparents.length === 0 ? (
+      )}
+
+      {godchildrenOnly ? null : godparents.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t('godparents.none')}</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
@@ -100,7 +113,9 @@ export function PersonGodparents({ person }: { person: Person }): JSX.Element {
         </div>
       )}
 
-      {godchildren.length > 0 && (
+      {/* "Godchild of…" is about OTHER people's christenings, so it stays out of
+          this person's own christening block. */}
+      {!compact && godchildren.length > 0 && (
         <div className="space-y-1 pt-1">
           <p className="text-[11px] font-medium text-muted-foreground">{t('godparents.godchildOf')}</p>
           <div className="flex flex-wrap gap-1.5">

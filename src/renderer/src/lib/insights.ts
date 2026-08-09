@@ -25,7 +25,12 @@ const topOf = (counts: Map<string, number>): [string, number] | null =>
   [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? null
 
 /** Computes a rich set of "did you know" facts from the whole database. */
-export function computeInsights(people: Person[], families: Family[]): Insight[] {
+export function computeInsights(
+  people: Person[],
+  families: Family[],
+  /** Raw place spelling → canonical bucket (identity when omitted). */
+  canonPlace: (raw: string) => string = (raw) => raw
+): Insight[] {
   const out: Insight[] = []
   if (people.length === 0) return out
   const byId = new Map(people.map((p) => [p.id, p]))
@@ -97,7 +102,7 @@ export function computeInsights(people: Person[], families: Family[]): Insight[]
   for (const p of people) {
     const s = p.surname.trim()
     if (s) surnames.set(s, (surnames.get(s) ?? 0) + 1)
-    const pl = (p.birthPlace ?? '').trim()
+    const pl = canonPlace((p.birthPlace ?? '').trim())
     if (pl) places.set(pl, (places.get(pl) ?? 0) + 1)
   }
   const topSurname = topOf(surnames)

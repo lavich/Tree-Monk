@@ -185,6 +185,11 @@ export const Channels = {
     add: 'witnesses:add',
     remove: 'witnesses:remove'
   },
+  factParticipants: {
+    forFact: 'factParticipants:forFact',
+    add: 'factParticipants:add',
+    remove: 'factParticipants:remove'
+  },
   attributes: {
     forPerson: 'attributes:forPerson',
     create: 'attributes:create',
@@ -279,6 +284,7 @@ export const Channels = {
     listTrees: 'familysearch:listTrees',
     lookupPerson: 'familysearch:lookupPerson',
     normalizeDate: 'familysearch:normalizeDate',
+    throttleProbe: 'familysearch:throttleProbe',
   },
   db: {
     wipe: 'db:wipe',
@@ -490,6 +496,13 @@ export interface TreeMonkApi {
     add(ownerType: 'person' | 'family', ownerId: string, witnessId: string): Promise<void>
     remove(ownerType: 'person' | 'family', ownerId: string, witnessId: string): Promise<void>
   }
+  factParticipants: {
+    /** People involved in a vital fact WITH a role — the midwife at a birth, the
+     *  officiating priest at a christening or burial. `factTag` is BIRT/CHR/DEAT/BURI. */
+    forFact(personId: string, factTag: string): Promise<{ personId: string; role: string | null }[]>
+    add(personId: string, factTag: string, participantId: string, role: string | null): Promise<void>
+    remove(personId: string, factTag: string, participantId: string): Promise<void>
+  }
   attributes: {
     /** Free-form person attributes (GEDCOM FACT/TYPE): height, haplogroup, … */
     forPerson(personId: string): Promise<PersonAttribute[]>
@@ -591,9 +604,9 @@ export interface TreeMonkApi {
   }
   site: {
     /** Static-website export: one self-contained, searchable HTML file. */
-    export(lang: string): Promise<{ path: string } | null>
+    export(lang: string, personIds?: string[]): Promise<{ path: string } | null>
     /** Print-ready name + place index lists as one HTML file. */
-    exportIndexes(lang: string): Promise<{ path: string } | null>
+    exportIndexes(lang: string, personIds?: string[]): Promise<{ path: string } | null>
   }
   csv: {
     /** Bulk person import from a CSV file (file picker in the main process). */
@@ -616,6 +629,17 @@ export interface TreeMonkApi {
     /** Forget the cached OAuth session. */
     signOut(): Promise<void>
     import(options: FamilySearchImportOptions): Promise<GedcomImportResult>
+    /** Live self-test against FamilySearch's own /platform/throttled endpoint:
+     *  proves the client honours Retry-After and recovers, and reports where
+     *  the adaptive pacing loop currently sits. */
+    throttleProbe(): Promise<{
+      ok: boolean
+      status: number
+      attempts: number
+      waitedMs: number
+      retryAfterMs: number | null
+      pace: { concurrency: number; spacingMs: number; processingMsLastMinute: number; requestsLastMinute: number }
+    }>
     /** Searches FamilySearch for people so the user can pick a starting person. */
     search(options: { query: string }): Promise<FamilySearchPersonResult[]>
     /** Confirms a starting person + estimates how many ancestors would download. */

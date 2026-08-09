@@ -24,9 +24,9 @@ import { DocumentThumb } from '@/components/documents/DocumentThumb'
 import { DocumentViewerDialog } from '@/components/documents/DocumentViewerDialog'
 import { useAppStore } from '@/store/useAppStore'
 import { canView } from '@/lib/docCategory'
-import { sourceYear } from '@/lib/citationYear'
+import { inferredSourceYear, sourceYear } from '@/lib/citationYear'
 import { cn } from '@/lib/utils'
-import type { CitationDetail, CitationEdit, DocumentRecord } from '@shared/types'
+import type { CitationDetail, CitationEdit, DocumentRecord, Person } from '@shared/types'
 
 /** Strips inline HTML markup (e.g. <i>FamilySearch</i>) that GEDCOM sources embed. */
 function stripHtml(s: string): string {
@@ -71,11 +71,17 @@ function Linkify({ text }: { text: string }): JSX.Element {
 
 function CitationCard({
   c,
+  person,
+  marriageDates,
   onEdit,
   onDelete,
   onManagePeople
 }: {
   c: CitationDetail
+  /** The person this citation hangs on — lets an undated record borrow the date
+   *  of the event it documents (see `inferredSourceYear`). */
+  person: Person | null
+  marriageDates: (string | null | undefined)[]
   onEdit: () => void
   onDelete: () => void
   /** Manage which people this source is attached to (only when it has a source). */
@@ -83,7 +89,12 @@ function CitationCard({
 }): JSX.Element {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
-  const year = sourceYear(c)
+  const ownYear = sourceYear(c)
+  // A browsed (unindexed) FamilySearch image carries no date at all. Fall back
+  // to the date of the event it documents — the same thing FamilySearch shows
+  // in its own sources list — and mark it as inferred.
+  const inferred = ownYear === null ? inferredSourceYear(c, person, marriageDates) : null
+  const year = ownYear ?? inferred
   const full = [c.sourceTitle, c.sourceAuthor, c.sourcePublication, c.page, c.repositoryName]
     .filter(Boolean)
     .map((s) => stripHtml(s as string))
@@ -147,8 +158,16 @@ function CitationCard({
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {year !== null && (
-              <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary">
-                {year}
+              <span
+                title={inferred !== null ? t('person.srcYearInferred') : undefined}
+                className={cn(
+                  'rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                  inferred !== null
+                    ? 'border border-dashed border-primary/40 bg-transparent text-primary/80'
+                    : 'bg-primary/15 text-primary'
+                )}
+              >
+                {inferred !== null ? `~${year}` : year}
               </span>
             )}
             {c.eventTag && (
@@ -289,6 +308,17 @@ export function CitationForm({
 /** Professional source manager: attach files / images / links, plus citations. */
 export function PersonSources({ personId }: { personId: string }): JSX.Element {
   const { t } = useTranslation()
+  // Needed so a source with no date of its own can borrow the date of the event
+  // it documents (browsed FamilySearch images are never dated by the API).
+  const person = useAppStore((s) => s.peopleById.get(personId) ?? null)
+  const families = useAppStore((s) => s.families)
+  const marriageDates = useMemo(
+    () =>
+      families
+        .filter((f) => f.husbandId === personId || f.wifeId === personId)
+        .map((f) => f.marriageDate),
+    [families, personId]
+  )
   const refreshDocuments = useAppStore((s) => s.refreshDocuments)
   const bumpSources = useAppStore((s) => s.bumpSources)
   const [docs, setDocs] = useState<DocumentRecord[]>([])
@@ -547,6 +577,8 @@ export function PersonSources({ personId }: { personId: string }): JSX.Element {
             <CitationCard
               key={c.id}
               c={c}
+              person={person}
+              marriageDates={marriageDates}
               onEdit={() => {
                 setAdding(false)
                 setEditingId(c.id)

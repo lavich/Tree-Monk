@@ -44,13 +44,13 @@
       "other": "Egyéb"
     },
     "standardizeTitle": "Helyek standardizálása",
-    "standardizeDesc": "Az összes helynév egységesítése a kanonikus formára (a duplikátumok, pl. „…Hungary” / „…Magyarország” összevonása).",
+    "standardizeDesc": "A helynévváltozatok összekapcsolása (pl. „Hungary” / „Magyarország”), hogy a statisztika és a térkép egy helyként kezelje őket. Az adataidat nem írja át — minden úgy marad, ahogy a forrásban áll.",
     "standardizeBtn": "Standardizálás",
     "standardizing": "Helyek standardizálása…",
     "standardizingHint": "Kanonikus helynevek keresése…",
     "progress": "{{done}}/{{total}} hely · {{changed}} egységesítve",
-    "standardizeDone": "{{count}} rekord helyei egységesítve",
-    "standardizeNone": "Minden hely már egységes",
+    "standardizeDone": "{{count}} helynév-változat összekapcsolva",
+    "standardizeNone": "Minden helynév össze van már kapcsolva",
     "standardizeFailed": "A standardizálás nem sikerült"
   },
   "welcome": {
@@ -71,7 +71,8 @@
     "title": "Írj a fejlesztőnek",
     "report": "Hiba jelentése",
     "desc": "Találtál hibát, vagy van egy ötleted? Írj közvetlenül e-mailt: barkattila@gmail.com",
-    "send": "E-mail írása"
+    "send": "E-mail írása",
+    "copied": "E-mail cím a vágólapra másolva"
   },
   "search": {
     "placeholder": "Keresés: személyek, dokumentumok…",
@@ -332,7 +333,8 @@
     "scopeBlood": "Vérvonal",
     "scopeAncestors": "Felmenők",
     "scopeDescendants": "Leszármazottak",
-    "generationsLabel": "Generációk"
+    "generationsLabel": "Generációk",
+    "scopeNeedsRoot": "Ehhez kell egy kiindulási személy (fent, a fa gyökere)."
   },
   "update": {
     "newVersion": "Új verzió",
@@ -1358,7 +1360,21 @@
     "unlinkParentsTitle": "{{name}} leválasztása erről a szülőpárról?",
     "unlinkParentsBody": "Csak a gyermek–szülő kapcsolat szűnik meg — egyik személy sem törlődik.",
     "moreNameFields": "További névmezők (előtag, utótag)",
-    "moreData": "További adatok"
+    "moreData": "További adatok",
+    "srcYearInferred": "Ez az évszám a kapcsolódó eseményből származik — a forráson magán nincs dátum.",
+    "showOnMapHistorical": "Történelmi térképen",
+    "showOnMapModern": "Jelenkori térképen",
+    "factParticipants": "Közreműködők",
+    "addParticipant": "Közreműködő",
+    "role": "Szerep",
+    "roles": {
+      "midwife": "bába",
+      "doctor": "orvos",
+      "informant": "bejelentő",
+      "priest": "pap",
+      "witness": "tanú",
+      "undertaker": "temetkező"
+    }
   },
   "research": {
     "history": "Kutatási előzmények",
@@ -1630,7 +1646,36 @@
     "signInNow": "Belépés a FamilySearch-be",
     "signingIn": "Belépés folyamatban…",
     "loginOk": "Beléptél a FamilySearch-be.",
-    "signedOutToast": "Kijelentkeztél a FamilySearch-ből."
+    "signedOutToast": "Kijelentkeztél a FamilySearch-ből.",
+    "ascLabel": "Felmenő nemzedékek",
+    "ascHelp": "Szülők, nagyszülők, dédszülők… csak az egyenes ág, a házastársaikkal. Ez ritkán lesz nagy, mert a régi ágak elfogynak — itt nyugodtan lehet magas a szám.",
+    "descLabel": "Leszármazottak",
+    "descHelp": "A kezdőszemély gyerekei, unokái, dédunokái…",
+    "sideLabel": "Oldalág",
+    "sideBadge": "Sok lesz",
+    "sideHelp": "Az ősök testvérei (1), azok gyerekei (2), unokatestvérek (3)… A 2 a legoptimálisabb: ettől lesz teljes érzetű a fa, anélkül hogy elszabadulna. A 3 már minden szinten nagyjából megháromszorozza a behozott embereket.",
+    "maxLabel": "Vészfék: legfeljebb ennyi személy",
+    "maxHelp": "Az import itt megáll, akkor is, ha a fa nagyobb lenne. Az ingyenes verzióban legfeljebb {{max}} fő.",
+    "estimate": "Becslés: kb. {{people}} személy, nagyjából {{minutes}} perc.",
+    "estimateNote": "Ez csak nagyságrendi becslés — a valóságban a fád alakja dönti el.",
+    "warnSide2": "A 2-es oldalágnál már az unokatestvérek is bejönnek. Ez sokszorosára növelheti az importot.",
+    "warnSideMax": "Ez a legmagasabb megengedett érték. Nagy fánál könnyen eléri a személykorlátot, és rengeteg olyan embert hoz be, akihez semmi közöd. Csak akkor válaszd, ha tényleg az egész rokonságot akarod.",
+    "warnOverCap": "A mostani beállítás túllépi a(z) {{max}} fős korlátot. Az import ott meg fog állni — a közvetlen felmenőid és a családjuk élveznek elsőbbséget, a távolabbi ágak kimaradnak.",
+    "warnLong": "Ez hosszú import lesz, körülbelül {{minutes}} perc. Addig is használhatod a programot, csak ne zárd be.",
+    "warnBackground": "Az import a háttérben fut, a fa menet közben épül. Bármikor leállíthatod — az addig behozott adatok megmaradnak.",
+    "resetDefaults": "Vissza az ajánlott beállításokra",
+    "probeBtn": "Kapcsolat tesztje",
+    "probeRunning": "Tesztelés…",
+    "probeOk": "A kapcsolat rendben. A teszt {{seconds}} mp alatt, {{attempts}} próbálkozásból ment át — a program helyesen kivárja a FamilySearch korlátozását. Jelenlegi tempó: {{concurrency}} párhuzamos kérés, {{spacing}} ms szünet.",
+    "probeFail": "A teszt nem sikerült (HTTP {{status}}). Ellenőrizd a hálózatot, vagy lépj ki és be újra.",
+    "recommended": "Ajánlott",
+    "directLineOnly": "Csak az egyenes ág",
+    "sessionExpired": "A FamilySearch-munkamenet lejárt. Jelentkezz be újra, és indítsd újra az importot.",
+    "confirmTitle": "Hogyan zajlik az import?",
+    "confirmPhase1": "Először a fa szerkezete és az alapadatok töltődnek le — a források, jegyzetek és fotók csak a legvégén érkeznek meg, ez a hosszabbik rész.",
+    "confirmPhase2": "A helységnevek egységesítése is az import után fut le — addig a statisztikában ugyanaz a település átmenetileg többször is szerepelhet.",
+    "confirmPhase3": "Az import a háttérben fut: közben nyugodtan használhatod a programot, csak ne zárd be. Bármikor leállíthatod — ami addig bejött, megmarad.",
+    "confirmStart": "Indítás"
   },
   "demo": {
     "introTitle": "Üdv a TreeMonk demóban!",

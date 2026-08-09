@@ -39,9 +39,25 @@ function monthIndex(date: string): number | null {
   return null
 }
 
+/**
+ * "19460704" -> "1946-07-04". FamilySearch stores whatever a contributor typed,
+ * and this compact shorthand is common there. It is a perfectly definite date,
+ * so it must be read as one instead of being reported as unparsable. Applied
+ * before every date is interpreted. Guarded on a real month/day so an id-like
+ * number is never mistaken for a date.
+ */
+function expandCompactDate(date: string): string {
+  return date.replace(/(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)/g, (m, y, mo, d) => {
+    const mm = Number(mo)
+    const dd = Number(d)
+    return mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 ? `${y}-${mo}-${d}` : m
+  })
+}
+
 /** Parses a free-form GEDCOM date into a decimal year (mid-year if no month). */
-function decimalYear(date: string | null): number | null {
-  if (!date) return null
+function decimalYear(dateRaw: string | null): number | null {
+  if (!dateRaw) return null
+  const date = expandCompactDate(dateRaw)
   const iso = date.match(/(\d{4})-(\d{2})-(\d{2})/)
   if (iso) return Number(iso[1]) + (Number(iso[2]) - 0.5) / 12
   const ym = date.match(/\b(\d{4})\b/)
@@ -62,8 +78,9 @@ const yearOf = (d: string | null): number | null => {
  * that month, a full ISO date is a single day. Lets date comparisons avoid false
  * positives from partial dates (e.g. "1922" vs "April 1922").
  */
-function dateBounds(date: string | null): { lo: number; hi: number } | null {
-  if (!date) return null
+function dateBounds(dateRaw: string | null): { lo: number; hi: number } | null {
+  if (!dateRaw) return null
+  const date = expandCompactDate(dateRaw)
   const iso = date.match(/(\d{4})-(\d{2})-(\d{2})/)
   if (iso) {
     const v = Number(iso[1]) + (Number(iso[2]) - 1) / 12 + (Number(iso[3]) - 1) / 365
@@ -112,8 +129,19 @@ const SPOUSE_AGE_GAP = 30 // years — a notice, not an error
 const MANY_CHILDREN = 18
 const CHRISTENING_LATE = 5 // years after birth before it looks odd (adult baptism exists)
 
-/** Event types that legitimately happen at/after death — never flagged as
- *  "event after death". Matched against the event `type` code. */
+/**
+ * Events that legitimately fall at or after death — never flagged as "event
+ * after death". Two groups:
+ *
+ *  • what happens TO the deceased (burial, probate, headstone…), and
+ *  • ADMINISTRATIVE acts that merely record an earlier event. A death can be
+ *    registered decades later — late registration, a rebuilt register, a
+ *    transcription — so "Death Registration 1980 († 1942)" is ordinary archival
+ *    reality, not a data error.
+ *
+ * Matched against the event type AND its label, because an imported event often
+ * carries the descriptive wording in the value while the type stays generic.
+ */
 const POSTMORTEM_TYPES = [
   'burial',
   'funeral',
@@ -126,7 +154,15 @@ const POSTMORTEM_TYPES = [
   'memorial',
   'headstone',
   'tombstone',
-  'gravestone'
+  'gravestone',
+  // Administrative / record-keeping acts — dated when the paperwork happened.
+  'registration',
+  'registered',
+  'registry',
+  'anyakönyv',
+  'certificate',
+  'transcript',
+  'index'
 ]
 
 /** Name tokens that belong in the prefix/suffix fields, not the name itself. */
@@ -319,7 +355,13 @@ export function runSanityCheck(fileExists?: (path: string) => boolean): SanityIs
     // Christening / baptism vs birth.
     const chr = dateBounds(p.christeningDate)
     if (chr && bb) {
-      if (bb.lo - chr.hi > -1e-6) {
+      // STRICTLY before, same shape as the burial-vs-death test above: the
+      // christening must END before the birth can possibly have happened. The
+      // old form fired when the two ranges merely touched, so a christening on
+      // the day of birth — the normal case for a frail newborn — could be
+      // reported as happening before it. Equal or overlapping dates are fine.
+      const sameDay = (p.christeningDate ?? '').trim() === (p.birthDate ?? '').trim()
+      if (!sameDay && chr.hi < bb.lo - 1e-9) {
         issues.push({
           id: nid(),
           rule: 'christeningBeforeBirth',
@@ -397,7 +439,10 @@ export function runSanityCheck(fileExists?: (path: string) => boolean): SanityIs
       const eb = dateBounds(ev.date)
       if (!eb) continue
       const label = (ev.value || ev.type || '').toString().slice(0, 40)
-      if (dd && !POSTMORTEM_TYPES.some((k) => ev.type.toLowerCase().includes(k)) && eb.lo - dd.hi > -1e-6) {
+      // Type AND label: an imported event often keeps a generic type and puts
+      // the real wording ("Death Registration") in the value.
+      const evText = `${ev.type ?? ''} ${ev.value ?? ''}`.toLowerCase()
+      if (dd && !POSTMORTEM_TYPES.some((k) => evText.includes(k)) && eb.lo - dd.hi > -1e-6) {
         issues.push({
           id: nid(),
           rule: 'eventAfterDeath',
@@ -712,37 +757,12 @@ export function runSanityCheck(fileExists?: (path: string) => boolean): SanityIs
       }
     }
 
-    // Siblings sharing the same given name. Skip the NECRONYM case (a child named
-    // after an earlier sibling who had already died) — that's a normal historical
-    // practice, not an error. Only flag when the two could have coexisted (so it's
-    // a likely duplicate / data slip).
-    const isNecronym = (a: Person, b: Person): boolean => {
-      const ad = dateBounds(a.deathDate)
-      const bb = dateBounds(b.birthDate)
-      const bd = dateBounds(b.deathDate)
-      const ab = dateBounds(a.birthDate)
-      // one died before the other was born (either order)
-      return (!!ad && !!bb && bb.lo - ad.hi > -1e-6) || (!!bd && !!ab && ab.lo - bd.hi > -1e-6)
-    }
-    const givenSeen = new Map<string, Person>()
-    for (const c of children) {
-      const g = (c.givenName || '').trim().toLowerCase()
-      if (!g) continue
-      const prev = givenSeen.get(g)
-      if (prev) {
-        if (!isNecronym(prev, c)) {
-          issues.push({
-            id: nid(),
-            rule: 'siblingSameName',
-            severity: 'low',
-            detail: `${name(prev)} — ${name(c)}`,
-            people: ref(prev, c)
-          })
-        }
-      } else {
-        givenSeen.set(g, c)
-      }
-    }
+    // NOTE: there is deliberately NO "siblings share a given name" check.
+    // In historical records that is the necronym — a child who died young, and
+    // the next one given the same name — and it is completely normal, not an
+    // error. The rule produced nothing but false alarms on real parish trees,
+    // so it was removed. Genuine duplicates (the same child entered twice) are
+    // the duplicate finder's job, see db/duplicates.ts.
 
     // Single births CERTAINLY less than 8 months apart (precision-aware).
     const dated = children

@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { toast } from 'sonner'
+import i18n from '@/i18n'
 import type { Alias, DocumentRecord, Family, GedcomImportResult, Person, ResearchLog, Todo } from '@shared/types'
 import { isFamilySearchId } from '@/lib/familySearchSearch'
 
@@ -166,7 +168,7 @@ interface AppState {
   setFsScanMinimized: (v: boolean) => void
   /** Background FamilySearch import (minimizable — watch the tree grow live). */
   fsImport: { running: boolean; phase: string; name: string; count: number; people: number; families: number } | null
-  startFsImport: (opts: { ascend: number; childrenDepth: number; treeId?: string; root?: string; maxPersons?: number; keepRoot?: boolean }) => Promise<void>
+  startFsImport: (opts: { ascend: number; childrenDepth: number; depth?: number; treeId?: string; root?: string; maxPersons?: number; keepRoot?: boolean }) => Promise<void>
   clearFsImport: () => void
   fsImportExpanded: boolean
   setFsImportExpanded: (v: boolean) => void
@@ -514,7 +516,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     const ticker = setInterval(() => {
       const imp = get().fsImport
       if (!imp?.running) return
-      const every = imp.phase === 'enriching' ? 10000 : 2500
+      const base = imp.phase === 'enriching' ? 10000 : 2500
+      // A full refresh reloads the WHOLE tree into the store and re-renders it.
+      // On a large import that cost grows with every person pulled in, so a
+      // fixed 2.5s cadence eventually spends more time refreshing than idle and
+      // the window stops responding — reported as "the import froze" when the
+      // import itself was still running fine. Back off as the tree grows.
+      const size = get().peopleById.size
+      const every = size > 8000 ? base * 8 : size > 4000 ? base * 4 : size > 1500 ? base * 2 : base
       if (Date.now() - lastTick < every) return
       lastTick = Date.now()
       void get().refreshAll()
@@ -524,7 +533,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       const people = (r.peopleCreated ?? 0) + (r.peopleUpdated ?? 0)
       const families = (r.familiesCreated ?? 0) + (r.familiesUpdated ?? 0)
       set((s) => (s.fsImport ? { fsImport: { ...s.fsImport, running: false, phase: 'done', people, families } } : {}))
-    } catch {
+    } catch (e) {
+      // A dead session is the one failure the user can fix themselves — say so
+      // in their language and flip every FS badge to signed-out (the main
+      // process has already dropped the unusable token). Everything else stays
+      // the generic error state.
+      if (String((e as Error)?.message ?? e).includes('FS_SESSION_EXPIRED')) {
+        toast.error(i18n.t('fs.sessionExpired'))
+        window.dispatchEvent(new Event('fs-auth-changed'))
+      }
       set((s) => (s.fsImport ? { fsImport: { ...s.fsImport, running: false, phase: 'error' } } : {}))
     } finally {
       off?.()

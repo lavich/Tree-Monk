@@ -47,3 +47,82 @@ export function sourceYear(
   }
   return citationYear(c)
 }
+
+/**
+ * The date of the EVENT a citation documents, taken from the tree itself.
+ *
+ * This is the only way to date a BROWSED (unindexed) FamilySearch record. Such
+ * a source has no date anywhere in the API — verified against every source
+ * endpoint and media type — yet FamilySearch's own interface shows one, because
+ * it displays the date of the event the source is tagged to. This reproduces
+ * that, using the record type parsed out of FamilySearch's citation text and
+ * the date already in the tree.
+ *
+ * It is DERIVED, never stored: the source itself stays undated, so an export or
+ * a contribution back to FamilySearch can never present it as the record's own
+ * date. Callers should mark it as inferred in the UI.
+ */
+export function eventDateForCitation(
+  eventTag: string | null | undefined,
+  person: {
+    birthDate?: string | null
+    christeningDate?: string | null
+    deathDate?: string | null
+    burialDate?: string | null
+  } | null,
+  marriageDates: (string | null | undefined)[] = []
+): string | null {
+  if (!eventTag || !person) return null
+  switch (eventTag) {
+    case 'BIRT':
+      return person.birthDate ?? null
+    case 'CHR':
+      return person.christeningDate ?? person.birthDate ?? null
+    case 'DEAT':
+      return person.deathDate ?? null
+    case 'BURI':
+      return person.burialDate ?? person.deathDate ?? null
+    case 'MARR': {
+      // Only unambiguous when the person has exactly ONE dated marriage —
+      // guessing between two would be worse than showing nothing.
+      const dated = marriageDates.filter((d): d is string => !!d)
+      return dated.length === 1 ? dated[0] : null
+    }
+    default:
+      return null
+  }
+}
+
+/**
+ * Year of {@link eventDateForCitation}, VALIDATED against the register the
+ * citation names, or null when it cannot be derived safely.
+ *
+ * The check matters because FamilySearch users routinely attach one birth
+ * record to the parents as well. Without it, a child's 1909 birth register
+ * would show the FATHER's birth year on his profile. But the citation states
+ * which volumes the image belongs to —
+ *
+ *   "Hungary, Civil Registration, 1895-1980" ... Births (Szulettek) 1909-1913
+ *
+ * - and a record cannot lie outside those years. A derived year falling outside
+ * ANY stated range is therefore dropped rather than shown.
+ */
+export function inferredSourceYear(
+  c: Pick<CitationDetail, 'eventTag' | 'sourceTitle' | 'sourceAuthor' | 'sourcePublication' | 'page'>,
+  person: Parameters<typeof eventDateForCitation>[1],
+  marriageDates?: (string | null | undefined)[]
+): number | null {
+  const d = eventDateForCitation(c.eventTag, person, marriageDates)
+  const m = d?.match(/(1[5-9]\d{2}|20\d{2})/)
+  if (!m) return null
+  const y = Number(m[1])
+  if (y < 1500 || y > NOW) return null
+  const text = strip([c.sourceTitle, c.sourceAuthor, c.sourcePublication, c.page].filter(Boolean).join(' '))
+  const ranges = text.matchAll(/(1[5-9]\d{2}|20\d{2})\s*[-–]\s*(1[5-9]\d{2}|20\d{2})/g)
+  for (const r of ranges) {
+    const lo = Number(r[1])
+    const hi = Number(r[2])
+    if (lo <= hi && (y < lo || y > hi)) return null
+  }
+  return y
+}

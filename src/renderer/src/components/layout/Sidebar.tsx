@@ -27,6 +27,7 @@ import {
   GitMerge
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useAppStore, type View } from '@/store/useAppStore'
 import { useSettings } from '@/store/useSettings'
@@ -52,7 +53,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 /** Feedback goes straight to the developer's inbox — no third-party form. */
-const FEEDBACK_MAILTO = 'mailto:barkattila@gmail.com?subject=TreeMonk'
+const FEEDBACK_EMAIL = 'barkattila@gmail.com'
+const FEEDBACK_MAILTO = `mailto:${FEEDBACK_EMAIL}?subject=TreeMonk`
 
 /** Compact labelled row for the accessibility flyout. */
 function A11yRow({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
@@ -148,6 +150,14 @@ export function Sidebar(): JSX.Element {
   const [supportOpen, setSupportOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [issueCount, setIssueCount] = useState(0)
+  // Bumped when an anomaly / duplicate is silenced, so the badge stops
+  // counting something the user has already dealt with.
+  const [sanityNonce, setSanityNonce] = useState(0)
+  useEffect(() => {
+    const on = (): void => setSanityNonce((n) => n + 1)
+    window.addEventListener('sanity-changed', on)
+    return () => window.removeEventListener('sanity-changed', on)
+  }, [])
   // Recompute the Issues badge when the tree changes (debounced — the scans walk
   // every person). We only need the COUNT here, never the full lists. The famous
   // scan was dropped: its nav entry is hidden, so it was pure wasted work on
@@ -192,7 +202,7 @@ export function Sidebar(): JSX.Element {
       if (idleId !== undefined) window.cancelIdleCallback?.(idleId)
       if (timerId) clearTimeout(timerId)
     }
-  }, [peopleLen, familiesLen, loading])
+  }, [peopleLen, familiesLen, loading, sanityNonce])
 
   // F1 opens the manual anywhere in the app (the help now lives next to Settings).
   useEffect(() => {
@@ -297,7 +307,17 @@ export function Sidebar(): JSX.Element {
         {withTip(
           'feedback.report',
           <button
-            onClick={() => void window.api.app.openExternal(FEEDBACK_MAILTO)}
+            onClick={() => {
+              // A mailto only works with a mail CLIENT installed. On a machine
+              // that uses webmail the system offers a chooser with nothing in
+              // it, and the address is unreachable — so the address goes to the
+              // clipboard at the same time, and the toast says so.
+              void window.api.app.openExternal(FEEDBACK_MAILTO)
+              void navigator.clipboard
+                .writeText(FEEDBACK_EMAIL)
+                .then(() => toast.success(t('feedback.copied'), { description: FEEDBACK_EMAIL }))
+                .catch(() => undefined)
+            }}
             data-testid="open-feedback"
             className={cn(
               'mb-1 flex h-10 shrink-0 items-center rounded-xl border border-primary/30 bg-primary/5 font-medium text-primary transition-colors hover:bg-primary/10',
