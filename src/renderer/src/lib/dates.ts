@@ -22,26 +22,32 @@ function deaccent(s: string): string {
 }
 
 /**
- * Month names + abbreviations in Hungarian, English and German → month number.
- * Keys are diacritic-stripped & lowercase (see deaccent). This is what lets the
- * offline parser recognise "1992 jan. 12", "12 January 1992", "január 1992" —
- * no network, no API (the FamilySearch Date authority is used when signed in;
- * this is the local equivalent).
+ * Month names + abbreviations in Hungarian, English, German and Russian → month
+ * number. Keys are diacritic-stripped & lowercase (see deaccent). This is what
+ * lets the offline parser recognise "1992 jan. 12", "12 January 1992",
+ * "január 1992", "12 января 1992" — no network, no API (the FamilySearch Date
+ * authority is used when signed in; this is the local equivalent).
+ *
+ * Russian keys must already be written the way deaccent() leaves them: NFD +
+ * combining-mark stripping turns "й" into "и" and "ё" into "е", so May is
+ * spelled "маи" here, never "май". Both the nominative ("январь") and the
+ * genitive ("января", the form that appears in running Russian dates) are
+ * listed, plus the usual abbreviations.
  */
 const MONTHS: Record<string, number> = (() => {
   const table: [number, string[]][] = [
-    [1, ['january', 'jan', 'januar', 'januar', 'januar']],
-    [2, ['february', 'feb', 'februar', 'februar']],
-    [3, ['march', 'mar', 'marc', 'marcius', 'marz', 'mrz']],
-    [4, ['april', 'apr', 'aprilis']],
-    [5, ['may', 'maj', 'majus', 'mai']],
-    [6, ['june', 'jun', 'junius', 'juni']],
-    [7, ['july', 'jul', 'julius', 'juli']],
-    [8, ['august', 'aug', 'augusztus']],
-    [9, ['september', 'sep', 'sept', 'szeptember', 'szept', 'szep']],
-    [10, ['october', 'oct', 'okt', 'oktober']],
-    [11, ['november', 'nov']],
-    [12, ['december', 'dec', 'dez', 'dezember']]
+    [1, ['january', 'jan', 'januar', 'januar', 'januar', 'январь', 'января', 'янв']],
+    [2, ['february', 'feb', 'februar', 'februar', 'февраль', 'февраля', 'февр', 'фев']],
+    [3, ['march', 'mar', 'marc', 'marcius', 'marz', 'mrz', 'март', 'марта', 'мар']],
+    [4, ['april', 'apr', 'aprilis', 'апрель', 'апреля', 'апр']],
+    [5, ['may', 'maj', 'majus', 'mai', 'маи', 'мая']],
+    [6, ['june', 'jun', 'junius', 'juni', 'июнь', 'июня', 'июн']],
+    [7, ['july', 'jul', 'julius', 'juli', 'июль', 'июля', 'июл']],
+    [8, ['august', 'aug', 'augusztus', 'август', 'августа', 'авг']],
+    [9, ['september', 'sep', 'sept', 'szeptember', 'szept', 'szep', 'сентябрь', 'сентября', 'сент', 'сен']],
+    [10, ['october', 'oct', 'okt', 'oktober', 'октябрь', 'октября', 'окт']],
+    [11, ['november', 'nov', 'ноябрь', 'ноября', 'ноя']],
+    [12, ['december', 'dec', 'dez', 'dezember', 'декабрь', 'декабря', 'дек']]
   ]
   const out: Record<string, number> = {}
   for (const [n, names] of table) for (const name of names) out[name] = n
@@ -111,12 +117,13 @@ function tokenToMonth(key: string): number | null {
 }
 
 /**
- * Recognise a month-name date in any of hu/en/de, any order, with/without a
+ * Recognise a month-name date in any of hu/en/de/ru, any order, with/without a
  * day and ordinal suffixes, Roman-numeral months, mixed separators, and small
  * typos: "1992 jan. 12", "12 January 1992", "January 12, 1992", "január 1992",
- * "1850. VII. 12", "12-Jan-1992", "decmber 1850". Requires a recognised month
- * AND a 4-digit year; the day is optional. Returns ISO-ish `YYYY-MM[-DD]`, or
- * null if the text isn't a month-name date (numeric branches / fallback handle it).
+ * "1850. VII. 12", "12-Jan-1992", "decmber 1850", "12 января 1992". Requires a
+ * recognised month AND a 4-digit year; the day is optional. Returns ISO-ish
+ * `YYYY-MM[-DD]`, or null if the text isn't a month-name date (numeric branches
+ * / fallback handle it).
  */
 function parseMonthName(s: string): string | null {
   const toks = s.split(/[\s.,/-]+/).filter(Boolean)
@@ -170,7 +177,8 @@ export function splitQualifier(raw: string | null | undefined): QualifiedDate {
 /**
  * Pull a typed qualifier off the raw INPUT (multi-language, symbol or word,
  * leading or trailing) so "kb 1850", "~1850", "1850 előtt", "vor 1850",
- * "between 1850 and 1860", "1850 és 1860 között" all canonicalise.
+ * "between 1850 and 1860", "1850 és 1860 között", "ок. 1850", "до 1850",
+ * "после 1850", "между 1850 и 1860" all canonicalise.
  */
 function splitInputQualifier(s: string): QualifiedDate {
   // Already-canonical (or GEDCOM-imported) prefixes first.
@@ -178,13 +186,17 @@ function splitInputQualifier(s: string): QualifiedDate {
   if (canonical.qual) return canonical
   let m =
     /^(?:between|zwischen)\s+(.+?)\s+(?:and|und)\s+(.+)$/i.exec(s) ??
+    /^между\s+(.+?)\s+и\s+(.+)$/i.exec(s) ??
     /^(.+?)\s+és\s+(.+?)\s+között$/i.exec(s)
   if (m) return { qual: 'BET', core: m[1].trim(), end: m[2].trim() }
-  m = /^(?:~|kb\.?|ca\.?|cca\.?|abt\.?|about|approx\.?|um|etwa)\s*(.+)$/i.exec(s)
+  // Russian: longer words first so they are not clipped by a shorter alternative,
+  // and "ок."/"прибл." keep their dot — otherwise "октябрь 1850" would be read as
+  // an ABT qualifier instead of a month name.
+  m = /^(?:~|kb\.?|ca\.?|cca\.?|abt\.?|about|approx\.?|um|etwa|приблизительно|примерно|около|прибл\.|ок\.)\s*(.+)$/i.exec(s)
   if (m) return { qual: 'ABT', core: m[1].trim(), end: null }
-  m = /^(?:<|bef\.?|before|vor)\s*(.+)$/i.exec(s)
+  m = /^(?:<|bef\.?|before|vor)\s*(.+)$/i.exec(s) ?? /^(?:до|ранее)\s+(.+)$/i.exec(s)
   if (m) return { qual: 'BEF', core: m[1].trim(), end: null }
-  m = /^(?:>|aft\.?|after|nach)\s*(.+)$/i.exec(s)
+  m = /^(?:>|aft\.?|after|nach)\s*(.+)$/i.exec(s) ?? /^(?:после|позже)\s+(.+)$/i.exec(s)
   if (m) return { qual: 'AFT', core: m[1].trim(), end: null }
   m = /^(.+?)\s+körül$/i.exec(s)
   if (m) return { qual: 'ABT', core: m[1].trim(), end: null }
@@ -224,9 +236,9 @@ function normalizeCore(raw: string): string {
   // Julian-calendar marker at the END — "1700-02-11 (J)", "1700.02.11 julián"
   // → canonical "<normalized> (J)". Only applied when the rest is a clean
   // numeric date, so free text keeps its trailing words. The marker word must
-  // be explicit ("julián/julianisch/…" or "(J)") — a bare trailing "jul" is a
-  // JULY abbreviation, not the Julian flag, so it is NOT accepted here.
-  const jm = /^(.*?)\s*(?:\(J\)|jul(?:ian|ián|iánus|ianisch|ianus)\.?)$/i.exec(s)
+  // be explicit ("julián/julianisch/юлианская/…" or "(J)") — a bare trailing
+  // "jul" is a JULY abbreviation, not the Julian flag, so it is NOT accepted here.
+  const jm = /^(.*?)\s*(?:\(J\)|jul(?:ian|ián|iánus|ianisch|ianus)\.?|юлианск(?:ий|ая|ое)\.?)$/i.exec(s)
   if (jm && jm[1].trim() && jm[1].trim() !== s) {
     const core = normalizeCore(jm[1])
     if (/^\d{4}/.test(core)) return `${core} (J)`
@@ -291,10 +303,10 @@ function normalizeCore(raw: string): string {
     if (okMonth(mo)) return `${y}-${pad(mo)}`
   }
 
-  // Month-name dates in hu/en/de, any order: "1992 jan. 12", "12 January 1992",
-  // "január 1992", "1992 Jul". Offline — the local equivalent of the FS Date
-  // authority. Runs after the numeric branches (month-name input has letters, so
-  // it never collides with them).
+  // Month-name dates in hu/en/de/ru, any order: "1992 jan. 12", "12 January 1992",
+  // "január 1992", "12 января 1992", "1992 Jul". Offline — the local equivalent
+  // of the FS Date authority. Runs after the numeric branches (month-name input
+  // has letters, so it never collides with them).
   const byName = parseMonthName(s)
   if (byName) return byName
 
@@ -331,11 +343,12 @@ export function formatDisplayDate(
     if (q.qual === 'BET') {
       if (l === 'hu') return `${core} és ${end} között`
       if (l === 'de') return `zwischen ${core} und ${end}`
+      if (l === 'ru') return `между ${core} и ${end}`
       return `between ${core} and ${end}`
     }
-    if (q.qual === 'ABT') return l === 'hu' ? `kb. ${core}` : l === 'de' ? `um ${core}` : `abt. ${core}`
-    if (q.qual === 'BEF') return l === 'hu' ? `${core} előtt` : l === 'de' ? `vor ${core}` : `before ${core}`
-    return l === 'hu' ? `${core} után` : l === 'de' ? `nach ${core}` : `after ${core}`
+    if (q.qual === 'ABT') return l === 'hu' ? `kb. ${core}` : l === 'de' ? `um ${core}` : l === 'ru' ? `ок. ${core}` : `abt. ${core}`
+    if (q.qual === 'BEF') return l === 'hu' ? `${core} előtt` : l === 'de' ? `vor ${core}` : l === 'ru' ? `до ${core}` : `before ${core}`
+    return l === 'hu' ? `${core} után` : l === 'de' ? `nach ${core}` : l === 'ru' ? `после ${core}` : `after ${core}`
   }
   return formatCore(s, fmt)
 }

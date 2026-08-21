@@ -10,7 +10,7 @@ import type { Family, Person } from '@shared/types'
  * placeholder with no data. Photos are intentionally not embedded (file size).
  */
 
-type Lang = 'hu' | 'en' | 'de'
+type Lang = 'hu' | 'en' | 'de' | 'ru'
 
 const L: Record<Lang, Record<string, string>> = {
   hu: {
@@ -123,6 +123,43 @@ const L: Record<Lang, Record<string, string>> = {
     bef: 'vor',
     aft: 'nach',
     illegitimate: 'uneheliches Kind'
+  },
+  ru: {
+    title: 'Родословное дерево',
+    generated: 'Создано',
+    people: 'персон',
+    families: 'семей',
+    search: 'Поиск по имени…',
+    index: 'Указатель имён',
+    birth: 'Рождение',
+    christening: 'Крещение',
+    death: 'Смерть',
+    burial: 'Погребение',
+    stillborn: 'мертворождённый',
+    religion: 'Вероисповедание',
+    occupations: 'Профессия',
+    events: 'События жизни',
+    attributes: 'Другие факты',
+    parents: 'Родители',
+    unions: 'Браки / союзы',
+    spouse: 'Супруг(а)',
+    marriage: 'Брак',
+    children: 'Дети',
+    godparents: 'Крёстные',
+    witnesses: 'Свидетели (крещение)',
+    marriageWitnesses: 'Свидетели',
+    notes: 'Заметки',
+    confidential: 'Конфиденциальная персона',
+    confidentialNote: 'Эта персона отмечена как конфиденциальная — её данные не экспортированы.',
+    footer: 'Экспорт родословного дерева TreeMonk',
+    indexTitle: 'Указатель имён и мест',
+    nameIndex: 'Указатель имён',
+    placeIndex: 'Указатель мест',
+    legend: 'Условные обозначения: * рождение · ~ крещение · ⚭ брак · † смерть · ▭ погребение · ⌂ место жительства',
+    abt: 'ок.',
+    bef: 'до',
+    aft: 'после',
+    illegitimate: 'внебрачный ребёнок'
   }
 }
 
@@ -138,6 +175,7 @@ function fmtDate(raw: string | null | undefined, l: Record<string, string>, lang
     const [a, b] = [bet[1].trim(), bet[2].trim()]
     if (lang === 'hu') return `${a} és ${b} között`
     if (lang === 'de') return `zwischen ${a} und ${b}`
+    if (lang === 'ru') return `между ${a} и ${b}`
     return `between ${a} and ${b}`
   }
   const q = /^(ABT|BEF|AFT)\.?\s+(.+)$/i.exec(s)
@@ -170,7 +208,7 @@ const yearOf = (d: string | null): string => {
  * couples and children never dangle.
  */
 export function exportSite(filePath: string, langRaw: string, personIds?: string[]): string {
-  const lang: Lang = langRaw === 'hu' || langRaw === 'de' ? langRaw : 'en'
+  const lang: Lang = langRaw === 'hu' || langRaw === 'de' || langRaw === 'ru' ? langRaw : 'en'
   const l = L[lang]
   const keep = personIds && personIds.length ? new Set(personIds) : null
   const people = keep ? People.list().filter((p) => keep.has(p.id)) : People.list()
@@ -347,7 +385,7 @@ ${sections}
  */
 /** See {@link exportSite} for `personIds`. */
 export function exportIndexes(filePath: string, langRaw: string, personIds?: string[]): string {
-  const lang: Lang = langRaw === 'hu' || langRaw === 'de' ? langRaw : 'en'
+  const lang: Lang = langRaw === 'hu' || langRaw === 'de' || langRaw === 'ru' ? langRaw : 'en'
   const l = L[lang]
   const keep = personIds && personIds.length ? new Set(personIds) : null
   const people = People.list().filter((p) => !p.isPrivate && (!keep || keep.has(p.id)))

@@ -1,7 +1,7 @@
 /**
  * Self-contained /docs page for the local API — no external assets (works
- * fully offline), trilingual (HU / EN / DE), endpoint list rendered live from
- * /api/v1/openapi.json so it can never drift from the actual surface.
+ * fully offline), four languages (HU / EN / DE / RU), endpoint list rendered
+ * live from /api/v1/openapi.json so it can never drift from the actual surface.
  */
 export const DOCS_HTML = `<!doctype html>
 <html lang="en">
@@ -35,7 +35,7 @@ export const DOCS_HTML = `<!doctype html>
 <body>
 <div class="wrap">
   <div class="langs">
-    <button data-l="hu">HU</button><button data-l="en" class="on">EN</button><button data-l="de">DE</button>
+    <button data-l="hu">HU</button><button data-l="en" class="on">EN</button><button data-l="de">DE</button><button data-l="ru">RU</button>
   </div>
   <h1>TreeMonk Local API</h1>
   <p class="mut" data-i="tagline"></p>
@@ -67,11 +67,18 @@ const T = {
     security: 'Der Server bindet nur an 127.0.0.1 und ist aus dem Netzwerk nicht erreichbar. Jeder Daten-Endpunkt erfordert das Bearer-Token aus den Einstellungen. Schreibzugriffe stehen hinter einem separaten Schalter.',
     authTitle: 'Authentifizierung', authBody: 'Füge jeder Anfrage den Authorization-Header mit dem Token aus den Einstellungen hinzu:',
     epTitle: 'Endpunkte', exTitle: 'Python-Beispiel'
+  },
+  ru: {
+    tagline: 'Данные вашего родословного дерева по HTTP — строго на этой машине (127.0.0.1).',
+    security: 'Сервер привязан только к 127.0.0.1 и недоступен из сети. Каждая конечная точка данных требует токен Bearer, показанный в Настройках. Запись включается отдельным переключателем.',
+    authTitle: 'Аутентификация', authBody: 'Добавляйте к каждому запросу заголовок Authorization с токеном, скопированным в Настройках:',
+    epTitle: 'Конечные точки', exTitle: 'Пример на Python'
   }
 }
 function setLang(l){
   document.querySelectorAll('.langs button').forEach(b=>b.classList.toggle('on',b.dataset.l===l))
   document.querySelectorAll('[data-i]').forEach(el=>{ el.textContent = T[l][el.dataset.i] })
+  document.documentElement.lang = l
   localStorage.setItem('tm.docs.lang', l)
 }
 document.querySelectorAll('.langs button').forEach(b=>b.onclick=()=>setLang(b.dataset.l))
@@ -97,7 +104,7 @@ fetch('/api/v1/openapi.json').then(r=>r.json()).then(spec=>{
     }
   }
 }).catch(()=>{ document.getElementById('eps').textContent = 'openapi.json unavailable' })
-setLang(localStorage.getItem('tm.docs.lang') || (navigator.language||'en').slice(0,2).replace(/^(?!hu|de).*$/,'en'))
+setLang(localStorage.getItem('tm.docs.lang') || (navigator.language||'en').slice(0,2).replace(/^(?!hu|de|ru).*$/,'en'))
 </script>
 </body>
 </html>`

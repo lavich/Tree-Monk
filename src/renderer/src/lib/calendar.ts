@@ -21,7 +21,7 @@ interface Parts {
   d: number | null
 }
 
-// Month names (Hungarian, English, German — full + common abbreviations) → 1..12.
+// Month names (Hungarian, English, German, Russian — full + common abbreviations) → 1..12.
 const MONTHS: Record<string, number> = {}
 const defMonth = (n: number, ...names: string[]): void => {
   for (const x of names) MONTHS[x] = n
@@ -44,11 +44,26 @@ defMonth(1, 'january', 'januar')
 defMonth(2, 'february', 'februar')
 defMonth(3, 'märz', 'maerz')
 defMonth(12, 'dezember')
+// Russian — nominative, genitive (the form used in running dates such as
+// "12 января 1992") and the usual abbreviations. Tokens here are only
+// lowercased, never diacritic-stripped, so "й"/"ё" are spelled as written.
+defMonth(1, 'январь', 'января', 'янв')
+defMonth(2, 'февраль', 'февраля', 'февр', 'фев')
+defMonth(3, 'март', 'марта', 'мар')
+defMonth(4, 'апрель', 'апреля', 'апр')
+defMonth(5, 'май', 'мая')
+defMonth(6, 'июнь', 'июня', 'июн')
+defMonth(7, 'июль', 'июля', 'июл')
+defMonth(8, 'август', 'августа', 'авг')
+defMonth(9, 'сентябрь', 'сентября', 'сент', 'сен')
+defMonth(10, 'октябрь', 'октября', 'окт')
+defMonth(11, 'ноябрь', 'ноября', 'ноя')
+defMonth(12, 'декабрь', 'декабря', 'дек')
 
 /**
  * Pull Y/M/D out of a genealogy date. Handles ISO-ish ("1923-05-17", "1923.05",
- * "1923"), day-first numeric ("17.05.1923") AND textual month names in HU/EN/DE
- * ("1913. február 24", "24 February 1913"). Any part may be missing.
+ * "1923"), day-first numeric ("17.05.1923") AND textual month names in HU/EN/DE/RU
+ * ("1913. február 24", "24 February 1913", "12 января 1992"). Any part may be missing.
  */
 export function parts(date: string | null | undefined): Parts {
   const s = (date ?? '').toString().trim().toLowerCase()
