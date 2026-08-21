@@ -104,18 +104,18 @@ const TREEMONK_JS = `/* TreeMonk plugin SDK. Include AFTER treemonk.css, BEFORE 
   const theme =
     p.get('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   document.documentElement.dataset.theme = theme
-  const lang = ['hu', 'en', 'de'].includes(p.get('lang')) ? p.get('lang') : 'en'
+  const lang = ['hu', 'en', 'de', 'ru'].includes(p.get('lang')) ? p.get('lang') : 'en'
 
   window.TM = {
     /** http://127.0.0.1:<port> — the local API base. */
     api: p.get('api'),
     /** This plugin's own scoped token. Never send it anywhere else. */
     token: p.get('token'),
-    /** 'hu' | 'en' | 'de' — the app's UI language. */
+    /** 'hu' | 'en' | 'de' | 'ru' — the app's UI language. */
     lang,
     /** 'light' | 'dark' — the app's theme (already applied to <html>). */
     theme,
-    /** Pick the current language from { hu, en, de }. */
+    /** Pick the current language from { hu, en, de, ru }. */
     t(dict) {
       return dict[lang] ?? dict.en ?? Object.values(dict)[0] ?? ''
     },

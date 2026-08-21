@@ -64,6 +64,7 @@ function defaultTreeName(): string {
   const loc = (app.getLocale() || 'en').toLowerCase()
   if (loc.startsWith('hu')) return 'Családfa'
   if (loc.startsWith('de')) return 'Stammbaum'
+  if (loc.startsWith('ru')) return 'Родословное дерево'
   return 'Family Tree'
 }
 

@@ -3,12 +3,14 @@ import { initReactI18next } from 'react-i18next'
 import hu from './locales/hu.json'
 import en from './locales/en.json'
 import de from './locales/de.json'
+import ru from './locales/ru.json'
 import type { AppLanguage } from '@shared/types'
 
 export const LANGUAGES: { code: AppLanguage; label: string; flag: string }[] = [
   { code: 'hu', label: 'Magyar', flag: '🇭🇺' },
   { code: 'en', label: 'English', flag: '🇬🇧' },
-  { code: 'de', label: 'Deutsch', flag: '🇩🇪' }
+  { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
+  { code: 'ru', label: 'Русский', flag: '🇷🇺' }
 ]
 
 const STORAGE_KEY = 'treemonk.lang'
@@ -26,7 +28,8 @@ i18n.use(initReactI18next).init({
   resources: {
     hu: { translation: hu },
     en: { translation: en },
-    de: { translation: de }
+    de: { translation: de },
+    ru: { translation: ru }
   },
   lng: initialLang(),
   fallbackLng: 'en',

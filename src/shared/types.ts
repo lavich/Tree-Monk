@@ -930,7 +930,7 @@ export interface PluginPanelInfo {
   apiBase: string
 }
 
-export type AppLanguage = 'hu' | 'en' | 'de'
+export type AppLanguage = 'hu' | 'en' | 'de' | 'ru'
 
 // ---- Printable tree export ----
 
