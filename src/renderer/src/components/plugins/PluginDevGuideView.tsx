@@ -7,7 +7,7 @@ import { API_EXAMPLES, PLUGIN_LLM_SPEC } from '@/lib/pluginLlmSpec'
 
 /**
  * In-app technical guide for plugin AUTHORS (sidebar → Plugins → Build a
- * plugin). The prose lives here per language (hu/en/de, following the app
+ * plugin). The prose lives here per language (hu/en/de/ru, following the app
  * language); code samples are language-neutral. PLUGINS.md in the repo is the
  * same material for people reading on GitHub.
  */
@@ -23,37 +23,37 @@ interface Section {
 }
 
 /** Every local-API route — the descriptions are localized, the rest shared. */
-const API_ROWS: { m: string; p: string; scope: string; d: Record<'hu' | 'en' | 'de', string> }[] = [
-  { m: 'GET', p: '/api/v1/stats', scope: 'read', d: { hu: 'Fa-statisztika (fő, család, helyek, legkorábbi/legkésőbbi születési év)', en: 'Tree statistics (people, families, places, earliest/latest birth year)', de: 'Baum-Statistik (Personen, Familien, Orte, frühestes/spätestes Geburtsjahr)' } },
-  { m: 'GET', p: '/api/v1/people?q&limit&offset', scope: 'read', d: { hu: 'Személyek listázása/keresése → { total, offset, items } (limit ≤ 500)', en: 'List/search people → { total, offset, items } (limit ≤ 500)', de: 'Personen listen/suchen → { total, offset, items } (limit ≤ 500)' } },
-  { m: 'GET', p: '/api/v1/people/{id}', scope: 'read', d: { hu: 'Személy-részletek → { person, parentsFamily, unions, events }', en: 'Person detail → { person, parentsFamily, unions, events }', de: 'Personendetails → { person, parentsFamily, unions, events }' } },
-  { m: 'GET', p: '/api/v1/people/{id}/events', scope: 'read', d: { hu: 'Egy személy életeseményei (lakhelyek, tények…)', en: "A person's life events (residences, facts…)", de: 'Lebensereignisse einer Person (Wohnorte, Fakten…)' } },
-  { m: 'GET', p: '/api/v1/families?limit&offset', scope: 'read', d: { hu: 'Családok lapozva → { total, offset, items } (limit ≤ 1000, alap 200)', en: 'Families, paged → { total, offset, items } (limit ≤ 1000, default 200)', de: 'Familien, seitenweise → { total, offset, items } (limit ≤ 1000, Standard 200)' } },
-  { m: 'GET', p: '/api/v1/families/{id}', scope: 'read', d: { hu: 'Egy család részletei', en: 'One family', de: 'Eine Familie' } },
-  { m: 'GET', p: '/api/v1/people/{id}/documents', scope: 'read', d: { hu: 'Egy személy dokumentumainak metaadatai', en: "A person's document metadata", de: 'Dokument-Metadaten einer Person' } },
-  { m: 'GET', p: '/api/v1/people/{id}/citations', scope: 'read', d: { hu: 'Egy személy forráshivatkozásai (forráscím/szerző/szöveg, esemény-tag, minőség)', en: "A person's source citations (source title/author/text, event tag, quality)", de: 'Quellenzitate einer Person (Titel/Autor/Text, Ereignis-Tag, Qualität)' } },
-  { m: 'GET', p: '/api/v1/people/{id}/occupations', scope: 'read', d: { hu: 'Egy személy foglalkozásai (időszakkal)', en: "A person's occupations (time-scoped)", de: 'Berufe einer Person (mit Zeitraum)' } },
-  { m: 'GET', p: '/api/v1/occupations', scope: 'read', d: { hu: 'Minden foglalkozás, minden személytől', en: 'Every occupation of every person', de: 'Alle Berufe aller Personen' } },
-  { m: 'GET', p: '/api/v1/people/{id}/aliases', scope: 'read', d: { hu: 'Névváltozatok / álnevek', en: 'Name variants / AKA aliases', de: 'Namensvarianten / Aliasnamen' } },
-  { m: 'GET', p: '/api/v1/aliases', scope: 'read', d: { hu: 'Minden névváltozat', en: 'Every alias', de: 'Alle Namensvarianten' } },
-  { m: 'GET', p: '/api/v1/people/{id}/godparents', scope: 'read', d: { hu: 'Keresztszülő-idk + kiknek keresztszülője → { godparentIds, godchildIds }', en: 'Godparent ids + godchildren → { godparentIds, godchildIds }', de: 'Paten-Ids + Patenkinder → { godparentIds, godchildIds }' } },
-  { m: 'GET', p: '/api/v1/people/{id}/notes', scope: 'read', d: { hu: 'Szabadszöveges jegyzetek', en: 'Free-text notes', de: 'Freitext-Notizen' } },
-  { m: 'GET', p: '/api/v1/people/{id}/research-logs', scope: 'read', d: { hu: 'Kutatási napló bejegyzései a személyhez', en: 'Research log entries for the person', de: 'Recherche-Protokolleinträge zur Person' } },
-  { m: 'GET', p: '/api/v1/research-logs', scope: 'read', d: { hu: 'Minden kutatási bejegyzés (általánosak is)', en: 'Every research log entry (incl. general ones)', de: 'Alle Recherche-Einträge (auch allgemeine)' } },
-  { m: 'GET', p: '/api/v1/people/{id}/collaborations', scope: 'read', d: { hu: 'FamilySearch-együttműködések (csak olvasható)', en: 'FamilySearch collaborations (read-only)', de: 'FamilySearch-Kollaborationen (nur lesend)' } },
-  { m: 'GET', p: '/api/v1/places', scope: 'read', d: { hu: 'Geokódolt helynevek (név, koordináták)', en: 'Geocoded places (name, coordinates)', de: 'Geokodierte Orte (Name, Koordinaten)' } },
-  { m: 'GET', p: '/api/v1/pedigree?rootId', scope: 'read', d: { hu: 'Pedigré-fa (házaspár-csomópontok, gyerekekkel)', en: 'Pedigree tree (couple nodes with children)', de: 'Ahnentafel (Paar-Knoten mit Kindern)' } },
-  { m: 'GET', p: '/api/v1/atlas/points', scope: 'read', d: { hu: 'Minden geokódolt életesemény (térképpontok)', en: 'Every geocoded life event (map points)', de: 'Jedes geokodierte Lebensereignis (Kartenpunkte)' } },
-  { m: 'GET', p: '/api/v1/export/gedcom', scope: 'read', d: { hu: 'Teljes GEDCOM 5.5.1 export → { gedcom }', en: 'Full GEDCOM 5.5.1 export → { gedcom }', de: 'Voller GEDCOM-5.5.1-Export → { gedcom }' } },
-  { m: 'POST', p: '/api/v1/people', scope: 'write', d: { hu: 'Személy létrehozása (PersonInput) → Person', en: 'Create a person (PersonInput) → Person', de: 'Person anlegen (PersonInput) → Person' } },
-  { m: 'PATCH', p: '/api/v1/people/{id}', scope: 'write', d: { hu: 'Személy mezőinek módosítása (részleges PersonInput)', en: 'Update person fields (partial PersonInput)', de: 'Personenfelder ändern (teilweises PersonInput)' } },
-  { m: 'DELETE', p: '/api/v1/people/{id}', scope: 'write', d: { hu: 'Személy törlése', en: 'Delete a person', de: 'Person löschen' } },
-  { m: 'POST', p: '/api/v1/people/{id}/events', scope: 'write', d: { hu: 'Életesemény hozzáadása (EventInput)', en: 'Add a life event (EventInput)', de: 'Lebensereignis hinzufügen (EventInput)' } },
-  { m: 'DELETE', p: '/api/v1/events/{id}', scope: 'write', d: { hu: 'Életesemény törlése', en: 'Delete a life event', de: 'Lebensereignis löschen' } },
-  { m: 'POST', p: '/api/v1/families', scope: 'write', d: { hu: 'Család létrehozása (FamilyInput) → Family', en: 'Create a family (FamilyInput) → Family', de: 'Familie anlegen (FamilyInput) → Family' } },
-  { m: 'PATCH', p: '/api/v1/families/{id}', scope: 'write', d: { hu: 'Család módosítása (childIds a teljes listát cseréli!)', en: 'Update a family (childIds replaces the whole list!)', de: 'Familie ändern (childIds ersetzt die ganze Liste!)' } },
-  { m: 'DELETE', p: '/api/v1/families/{id}', scope: 'write', d: { hu: 'Család törlése', en: 'Delete a family', de: 'Familie löschen' } },
-  { m: 'GET', p: '/api/v1/documents/{id}/file', scope: 'documents', d: { hu: 'Nyers dokumentumfájl (kép/PDF bájtok; 409 = még nincs letöltve, 410 = hiányzik)', en: 'Raw document file (image/PDF bytes; 409 = not downloaded yet, 410 = missing)', de: 'Rohe Dokumentdatei (Bild/PDF-Bytes; 409 = noch nicht geladen, 410 = fehlt)' } }
+const API_ROWS: { m: string; p: string; scope: string; d: Record<'hu' | 'en' | 'de' | 'ru', string> }[] = [
+  { m: 'GET', p: '/api/v1/stats', scope: 'read', d: { hu: 'Fa-statisztika (fő, család, helyek, legkorábbi/legkésőbbi születési év)', en: 'Tree statistics (people, families, places, earliest/latest birth year)', de: 'Baum-Statistik (Personen, Familien, Orte, frühestes/spätestes Geburtsjahr)', ru: 'Статистика дерева (персоны, семьи, места, самый ранний/поздний год рождения)' } },
+  { m: 'GET', p: '/api/v1/people?q&limit&offset', scope: 'read', d: { hu: 'Személyek listázása/keresése → { total, offset, items } (limit ≤ 500)', en: 'List/search people → { total, offset, items } (limit ≤ 500)', de: 'Personen listen/suchen → { total, offset, items } (limit ≤ 500)', ru: 'Список/поиск персон → { total, offset, items } (limit ≤ 500)' } },
+  { m: 'GET', p: '/api/v1/people/{id}', scope: 'read', d: { hu: 'Személy-részletek → { person, parentsFamily, unions, events }', en: 'Person detail → { person, parentsFamily, unions, events }', de: 'Personendetails → { person, parentsFamily, unions, events }', ru: 'Данные персоны → { person, parentsFamily, unions, events }' } },
+  { m: 'GET', p: '/api/v1/people/{id}/events', scope: 'read', d: { hu: 'Egy személy életeseményei (lakhelyek, tények…)', en: "A person's life events (residences, facts…)", de: 'Lebensereignisse einer Person (Wohnorte, Fakten…)', ru: 'События жизни персоны (места жительства, факты…)' } },
+  { m: 'GET', p: '/api/v1/families?limit&offset', scope: 'read', d: { hu: 'Családok lapozva → { total, offset, items } (limit ≤ 1000, alap 200)', en: 'Families, paged → { total, offset, items } (limit ≤ 1000, default 200)', de: 'Familien, seitenweise → { total, offset, items } (limit ≤ 1000, Standard 200)', ru: 'Семьи с постраничной выдачей → { total, offset, items } (limit ≤ 1000, по умолчанию 200)' } },
+  { m: 'GET', p: '/api/v1/families/{id}', scope: 'read', d: { hu: 'Egy család részletei', en: 'One family', de: 'Eine Familie', ru: 'Одна семья' } },
+  { m: 'GET', p: '/api/v1/people/{id}/documents', scope: 'read', d: { hu: 'Egy személy dokumentumainak metaadatai', en: "A person's document metadata", de: 'Dokument-Metadaten einer Person', ru: 'Метаданные документов персоны' } },
+  { m: 'GET', p: '/api/v1/people/{id}/citations', scope: 'read', d: { hu: 'Egy személy forráshivatkozásai (forráscím/szerző/szöveg, esemény-tag, minőség)', en: "A person's source citations (source title/author/text, event tag, quality)", de: 'Quellenzitate einer Person (Titel/Autor/Text, Ereignis-Tag, Qualität)', ru: 'Ссылки на источники персоны (название/автор/текст источника, тег события, качество)' } },
+  { m: 'GET', p: '/api/v1/people/{id}/occupations', scope: 'read', d: { hu: 'Egy személy foglalkozásai (időszakkal)', en: "A person's occupations (time-scoped)", de: 'Berufe einer Person (mit Zeitraum)', ru: 'Профессии персоны (с указанием периода)' } },
+  { m: 'GET', p: '/api/v1/occupations', scope: 'read', d: { hu: 'Minden foglalkozás, minden személytől', en: 'Every occupation of every person', de: 'Alle Berufe aller Personen', ru: 'Все профессии всех персон' } },
+  { m: 'GET', p: '/api/v1/people/{id}/aliases', scope: 'read', d: { hu: 'Névváltozatok / álnevek', en: 'Name variants / AKA aliases', de: 'Namensvarianten / Aliasnamen', ru: 'Варианты имени / альтернативные имена' } },
+  { m: 'GET', p: '/api/v1/aliases', scope: 'read', d: { hu: 'Minden névváltozat', en: 'Every alias', de: 'Alle Namensvarianten', ru: 'Все альтернативные имена' } },
+  { m: 'GET', p: '/api/v1/people/{id}/godparents', scope: 'read', d: { hu: 'Keresztszülő-idk + kiknek keresztszülője → { godparentIds, godchildIds }', en: 'Godparent ids + godchildren → { godparentIds, godchildIds }', de: 'Paten-Ids + Patenkinder → { godparentIds, godchildIds }', ru: 'Идентификаторы крёстных + крестники → { godparentIds, godchildIds }' } },
+  { m: 'GET', p: '/api/v1/people/{id}/notes', scope: 'read', d: { hu: 'Szabadszöveges jegyzetek', en: 'Free-text notes', de: 'Freitext-Notizen', ru: 'Заметки свободным текстом' } },
+  { m: 'GET', p: '/api/v1/people/{id}/research-logs', scope: 'read', d: { hu: 'Kutatási napló bejegyzései a személyhez', en: 'Research log entries for the person', de: 'Recherche-Protokolleinträge zur Person', ru: 'Записи журнала исследований по персоне' } },
+  { m: 'GET', p: '/api/v1/research-logs', scope: 'read', d: { hu: 'Minden kutatási bejegyzés (általánosak is)', en: 'Every research log entry (incl. general ones)', de: 'Alle Recherche-Einträge (auch allgemeine)', ru: 'Все записи журнала исследований (включая общие)' } },
+  { m: 'GET', p: '/api/v1/people/{id}/collaborations', scope: 'read', d: { hu: 'FamilySearch-együttműködések (csak olvasható)', en: 'FamilySearch collaborations (read-only)', de: 'FamilySearch-Kollaborationen (nur lesend)', ru: 'Совместная работа FamilySearch (только чтение)' } },
+  { m: 'GET', p: '/api/v1/places', scope: 'read', d: { hu: 'Geokódolt helynevek (név, koordináták)', en: 'Geocoded places (name, coordinates)', de: 'Geokodierte Orte (Name, Koordinaten)', ru: 'Геокодированные места (название, координаты)' } },
+  { m: 'GET', p: '/api/v1/pedigree?rootId', scope: 'read', d: { hu: 'Pedigré-fa (házaspár-csomópontok, gyerekekkel)', en: 'Pedigree tree (couple nodes with children)', de: 'Ahnentafel (Paar-Knoten mit Kindern)', ru: 'Родословное дерево (узлы супружеских пар с детьми)' } },
+  { m: 'GET', p: '/api/v1/atlas/points', scope: 'read', d: { hu: 'Minden geokódolt életesemény (térképpontok)', en: 'Every geocoded life event (map points)', de: 'Jedes geokodierte Lebensereignis (Kartenpunkte)', ru: 'Все геокодированные события жизни (точки на карте)' } },
+  { m: 'GET', p: '/api/v1/export/gedcom', scope: 'read', d: { hu: 'Teljes GEDCOM 5.5.1 export → { gedcom }', en: 'Full GEDCOM 5.5.1 export → { gedcom }', de: 'Voller GEDCOM-5.5.1-Export → { gedcom }', ru: 'Полный экспорт GEDCOM 5.5.1 → { gedcom }' } },
+  { m: 'POST', p: '/api/v1/people', scope: 'write', d: { hu: 'Személy létrehozása (PersonInput) → Person', en: 'Create a person (PersonInput) → Person', de: 'Person anlegen (PersonInput) → Person', ru: 'Создать персону (PersonInput) → Person' } },
+  { m: 'PATCH', p: '/api/v1/people/{id}', scope: 'write', d: { hu: 'Személy mezőinek módosítása (részleges PersonInput)', en: 'Update person fields (partial PersonInput)', de: 'Personenfelder ändern (teilweises PersonInput)', ru: 'Изменить поля персоны (частичный PersonInput)' } },
+  { m: 'DELETE', p: '/api/v1/people/{id}', scope: 'write', d: { hu: 'Személy törlése', en: 'Delete a person', de: 'Person löschen', ru: 'Удалить персону' } },
+  { m: 'POST', p: '/api/v1/people/{id}/events', scope: 'write', d: { hu: 'Életesemény hozzáadása (EventInput)', en: 'Add a life event (EventInput)', de: 'Lebensereignis hinzufügen (EventInput)', ru: 'Добавить событие жизни (EventInput)' } },
+  { m: 'DELETE', p: '/api/v1/events/{id}', scope: 'write', d: { hu: 'Életesemény törlése', en: 'Delete a life event', de: 'Lebensereignis löschen', ru: 'Удалить событие жизни' } },
+  { m: 'POST', p: '/api/v1/families', scope: 'write', d: { hu: 'Család létrehozása (FamilyInput) → Family', en: 'Create a family (FamilyInput) → Family', de: 'Familie anlegen (FamilyInput) → Family', ru: 'Создать семью (FamilyInput) → Family' } },
+  { m: 'PATCH', p: '/api/v1/families/{id}', scope: 'write', d: { hu: 'Család módosítása (childIds a teljes listát cseréli!)', en: 'Update a family (childIds replaces the whole list!)', de: 'Familie ändern (childIds ersetzt die ganze Liste!)', ru: 'Изменить семью (childIds заменяет весь список!)' } },
+  { m: 'DELETE', p: '/api/v1/families/{id}', scope: 'write', d: { hu: 'Család törlése', en: 'Delete a family', de: 'Familie löschen', ru: 'Удалить семью' } },
+  { m: 'GET', p: '/api/v1/documents/{id}/file', scope: 'documents', d: { hu: 'Nyers dokumentumfájl (kép/PDF bájtok; 409 = még nincs letöltve, 410 = hiányzik)', en: 'Raw document file (image/PDF bytes; 409 = not downloaded yet, 410 = missing)', de: 'Rohe Dokumentdatei (Bild/PDF-Bytes; 409 = noch nicht geladen, 410 = fehlt)', ru: 'Исходный файл документа (байты изображения/PDF; 409 — ещё не загружен, 410 — отсутствует)' } }
 ]
 
 const SHAPES_CODE = `Person {
@@ -120,14 +120,15 @@ const MANIFEST_CODE = `{
   "description": {
     "hu": "Rövid leírás magyarul.",
     "en": "A short description in English.",
-    "de": "Eine kurze Beschreibung auf Deutsch."
+    "de": "Eine kurze Beschreibung auf Deutsch.",
+    "ru": "Краткое описание по-русски."
   },
   "icon": "icon.svg",
   "permissions": ["read"],
   "menu": [
     {
       "id": "main",
-      "title": { "hu": "Saját nézet", "en": "My view", "de": "Meine Ansicht" },
+      "title": { "hu": "Saját nézet", "en": "My view", "de": "Meine Ansicht", "ru": "Мой раздел" },
       "entry": "index.html"
     }
   ]
@@ -155,7 +156,7 @@ const HTML_CODE = `<!doctype html>
   </body>
 </html>`
 
-const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; sections: Section[] }> = {
+const GUIDES: Record<'hu' | 'en' | 'de' | 'ru', { title: string; intro: string; sections: Section[] }> = {
   hu: {
     title: 'Bővítmény készítése',
     intro:
@@ -171,7 +172,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
       {
         title: '2 · Fájlszerkezet és manifest.json',
         paras: [
-          'my-plugin/ → manifest.json + index.html (+ icon.svg). A manifest minden mezőjét a telepítő ellenőrzi — a leírásnak és minden menücímnek mindhárom nyelven (hu/en/de) kötelező megadva lennie, különben a zip elutasításra kerül.',
+          'my-plugin/ → manifest.json + index.html (+ icon.svg). A manifest minden mezőjét a telepítő ellenőrzi — a leírásnak és minden menücímnek mindhárom nyelven (hu/en/de) kötelező megadva lennie, különben a zip elutasításra kerül. A negyedik nyelv, a ru, opcionális: hozzáadhatod, de nélküle is telepíthető a bővítmény.',
           'Az id kisbetű/szám/kötőjel (2–64 karakter); az „sdk” foglalt. A permissions lehetséges értékei: read, write, documents. Az icon egy Lucide-stílusú SVG a csomagban (24×24 viewBox, fill="none", stroke="#000", stroke-width 2) — az app currentColor-maszkként rajzolja ki, így pontosan úgy színeződik, mint a beépített ikonok. Emoji is megengedett.'
         ],
         code: MANIFEST_CODE
@@ -184,7 +185,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
           rows: [
             ['api', 'http://127.0.0.1:<port> — a helyi API címe'],
             ['token', 'A bővítmény saját, szűkített Bearer-tokenje'],
-            ['lang', 'hu | en | de — az app nyelve'],
+            ['lang', 'hu | en | de | ru — az app nyelve'],
             ['theme', 'light | dark — az app témája']
           ]
         }
@@ -229,7 +230,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
       {
         title: '8 · Kiadási ellenőrzőlista',
         list: [
-          'description + minden menücím hu/en/de nyelven (a telepítő ellenőrzi)',
+          'description + minden menücím hu/en/de nyelven (a telepítő ellenőrzi), a ru opcionális',
           'Minden látható szöveg TM.t({...})-n megy át',
           'Világosban ÉS sötétben is jó (válts témát — a panel újratölt)',
           'Színek a --tm-* változókból / SDK-osztályokból',
@@ -256,7 +257,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
       {
         title: '2 · File layout and manifest.json',
         paras: [
-          'my-plugin/ → manifest.json + index.html (+ icon.svg). The installer validates every field — the description and every menu title MUST be given in all three languages (hu/en/de), or the zip is rejected.',
+          'my-plugin/ → manifest.json + index.html (+ icon.svg). The installer validates every field — the description and every menu title MUST be given in all three languages (hu/en/de), or the zip is rejected. A fourth language, ru, is optional: add it if you like, the plugin installs fine without it.',
           'The id is lowercase letters/digits/dashes (2–64 chars); "sdk" is reserved. permissions values: read, write, documents. icon is a Lucide-style SVG in your zip (24×24 viewBox, fill="none", stroke="#000", stroke-width 2) — the app renders it as a currentColor mask, so it tints exactly like the built-in icons. An emoji also works.'
         ],
         code: MANIFEST_CODE
@@ -269,7 +270,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
           rows: [
             ['api', 'http://127.0.0.1:<port> — the local API base'],
             ['token', "The plugin's own scoped Bearer token"],
-            ['lang', "hu | en | de — the app's UI language"],
+            ['lang', "hu | en | de | ru — the app's UI language"],
             ['theme', "light | dark — the app's theme"]
           ]
         }
@@ -314,7 +315,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
       {
         title: '8 · Release checklist',
         list: [
-          'description + every menu title in hu/en/de (the installer checks)',
+          'description + every menu title in hu/en/de (the installer checks), ru optional',
           'All visible text goes through TM.t({...})',
           'Looks right in light AND dark (toggle the theme — your panel reloads)',
           'Colors come from --tm-* variables / SDK classes',
@@ -341,7 +342,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
       {
         title: '2 · Dateistruktur und manifest.json',
         paras: [
-          'my-plugin/ → manifest.json + index.html (+ icon.svg). Der Installer validiert jedes Feld — die Beschreibung und jeder Menütitel MÜSSEN in allen drei Sprachen (hu/en/de) vorliegen, sonst wird das Zip abgelehnt.',
+          'my-plugin/ → manifest.json + index.html (+ icon.svg). Der Installer validiert jedes Feld — die Beschreibung und jeder Menütitel MÜSSEN in allen drei Sprachen (hu/en/de) vorliegen, sonst wird das Zip abgelehnt. Eine vierte Sprache, ru, ist optional: füge sie gern hinzu, ohne sie lässt sich die Erweiterung ebenso installieren.',
           'Die id besteht aus Kleinbuchstaben/Ziffern/Bindestrichen (2–64 Zeichen); „sdk“ ist reserviert. permissions-Werte: read, write, documents. icon ist ein SVG im Lucide-Stil im Zip (24×24 viewBox, fill="none", stroke="#000", stroke-width 2) — die App rendert es als currentColor-Maske, es färbt sich also exakt wie die eingebauten Icons. Ein Emoji geht auch.'
         ],
         code: MANIFEST_CODE
@@ -354,7 +355,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
           rows: [
             ['api', 'http://127.0.0.1:<port> — Basis der lokalen API'],
             ['token', 'Das eigene, eingeschränkte Bearer-Token der Erweiterung'],
-            ['lang', 'hu | en | de — die Sprache der App'],
+            ['lang', 'hu | en | de | ru — die Sprache der App'],
             ['theme', 'light | dark — das Design der App']
           ]
         }
@@ -399,7 +400,7 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
       {
         title: '8 · Release-Checkliste',
         list: [
-          'description + jeder Menütitel in hu/en/de (der Installer prüft)',
+          'description + jeder Menütitel in hu/en/de (der Installer prüft), ru optional',
           'Jeder sichtbare Text läuft über TM.t({...})',
           'Sieht in Hell UND Dunkel richtig aus (Design umschalten — das Panel lädt neu)',
           'Farben kommen aus --tm-*-Variablen / SDK-Klassen',
@@ -410,15 +411,101 @@ const GUIDES: Record<'hu' | 'en' | 'de', { title: string; intro: string; section
         ]
       }
     ]
+  },
+  ru: {
+    title: 'Создание плагина',
+    intro:
+      'Плагин TreeMonk — это изолированная веб-панель: папка с manifest.json и HTML-файлом, упакованная в zip. Не нужны ни система сборки, ни npm, ни фреймворк. Входящий в комплект пример longevity-top — это готовый шаблон с комментариями.',
+    sections: [
+      {
+        title: '1 · Песочница — что плагин может и чего не может',
+        paras: [
+          'Ваша панель работает в изолированном iframe: ни Node, ни API Electron. Её политика безопасности содержимого (CSP) разрешает сетевые обращения только к http://127.0.0.1 — данные физически не могут быть отправлены в интернет.',
+          'Каждый вызов API аутентифицируется СОБСТВЕННЫМ токеном плагина, который действует только для разрешений, объявленных в манифесте. Пользователь соглашается с ними при включении плагина и в любой момент отзывает их, отключив плагин.'
+        ]
+      },
+      {
+        title: '2 · Структура файлов и manifest.json',
+        paras: [
+          'my-plugin/ → manifest.json + index.html (+ icon.svg). Установщик проверяет каждое поле — описание и каждый заголовок меню ОБЯЗАТЕЛЬНО должны быть заданы на всех трёх языках (hu/en/de), иначе zip будет отклонён. Четвёртый язык, ru, — опциональный: добавьте его, если хотите, но и без него плагин устанавливается.',
+          'id состоит из строчных латинских букв, цифр и дефисов (2–64 символа); «sdk» зарезервировано. Возможные значения permissions: read, write, documents. icon — это SVG в стиле Lucide внутри zip (viewBox 24×24, fill="none", stroke="#000", stroke-width 2) — приложение отрисовывает его как маску currentColor, поэтому он окрашивается ровно так же, как встроенные значки. Эмодзи тоже подойдёт.'
+        ],
+        code: MANIFEST_CODE
+      },
+      {
+        title: '3 · Параметры запуска (хеш URL)',
+        paras: ['Входной HTML получает всё в хеше URL:'],
+        table: {
+          head: ['Параметр', 'Значение'],
+          rows: [
+            ['api', 'http://127.0.0.1:<port> — адрес локального API'],
+            ['token', 'Собственный ограниченный Bearer-токен плагина'],
+            ['lang', 'hu | en | de | ru — язык интерфейса приложения'],
+            ['theme', 'light | dark — тема приложения']
+          ]
+        }
+      },
+      {
+        title: '4 · Официальный SDK (настоятельно рекомендуется)',
+        paras: [
+          'Оба файла отдаёт само приложение с зарезервированного хоста sdk, в том числе без сети. treemonk.js разбирает параметры хеша, выставляет атрибут <html data-theme> и предоставляет помощник TM: TM.t({hu,en,de}) — для языка, TM.fetch(путь) — для API (авторизация и JSON уже обработаны), TM.api / TM.token / TM.lang / TM.theme.',
+          'treemonk.css задаёт внешний вид TreeMonk: .tm-card, .tm-row, .tm-badge, .tm-btn, .tm-btn-primary, .tm-input, .tm-table, .tm-sub, .tm-muted, .tm-state. Для собственного CSS используйте переменные: --tm-fg, --tm-muted, --tm-card, --tm-card-solid, --tm-border, --tm-accent, --tm-accent-soft, --tm-danger, --tm-radius. НИКОГДА не задавайте цвет текста или фона жёстко — именно поэтому тёмная тема работает сама.',
+          'При переключении языка или темы приложение перезагружает вашу панель — обрабатывать это во время работы не нужно.'
+        ],
+        code: HTML_CODE
+      },
+      {
+        title: '5 · Разрешения и API',
+        table: {
+          head: ['Разрешение', 'Что даёт'],
+          rows: [
+            ['read', 'Все GET: персоны (список/поиск/подробности), семьи, события жизни, родословное дерево, точки Атласа, места, статистика, экспорт GEDCOM'],
+            ['write', 'POST/PATCH/DELETE: создание, изменение и удаление персон, семей и событий жизни — через тот же слой, что и интерфейс (журнал изменений и отмена включены)'],
+            ['documents', 'Исходные файлы документов (/api/v1/documents/{id}/file) — фотографии, сканы записей']
+          ]
+        },
+        paras: [
+          'API документирует себя сам: при запущенном сервере http://127.0.0.1:<port>/docs даёт трёхъязычный справочник, а /api/v1/openapi.json — машиночитаемую схему. Запрашивайте только те разрешения, которыми действительно пользуетесь — пользователь видит их метки до включения плагина.'
+        ]
+      },
+      {
+        title: '6 · Упаковка, установка, разработка',
+        paras: [
+          'Упакуйте в zip СОДЕРЖИМОЕ папки (манифест в корне архива или внутри единственной папки верхнего уровня). Установка: боковая панель → Плагины → Добавить плагин. Если манифест некорректен, мастер покажет точное сообщение валидатора — именно его и нужно исправить.',
+          'Во время разработки: после первой установки распакованные файлы можно править прямо в папке данных приложения (%APPDATA%/treemonk/plugins/<id>) и нажимать кнопку перезагрузки в заголовке панели. Повторная установка zip с тем же id обновляет плагин на месте — включённое состояние и токен сохраняются.'
+        ]
+      },
+      {
+        title: '7 · Полный справочник по API',
+        apiRef: true,
+        paras: [
+          'Базовый URL: TM.api (http://127.0.0.1:<port>). Аутентификация: Authorization: Bearer <TM.token> — TM.fetch делает это сам. Ошибки: 401 — недействительный токен, 403 — разрешение не выдано, 404 — неизвестный id или путь; тело ошибки — { "error": "…" }. Даты — строки в духе ISO (может быть просто год или текст, например «abt 1850») — год извлекайте через /\\d{4}/. Идентификаторы — непрозрачные строки: никогда не придумывайте их, всегда запрашивайте. Каждая запись попадает в журнал изменений и может быть отменена в приложении.'
+        ]
+      },
+      {
+        title: '8 · Контрольный список перед выпуском',
+        list: [
+          'description и каждый заголовок меню на hu/en/de (установщик проверяет), ru — по желанию',
+          'Весь видимый текст проходит через TM.t({...})',
+          'Выглядит правильно и в светлой, И в тёмной теме (переключите тему — панель перезагрузится)',
+          'Цвета берутся из переменных --tm-* и классов SDK',
+          'Значок — SVG в стиле Lucide (или осознанно выбранное эмодзи)',
+          'Только те разрешения, которые действительно вызываются',
+          'Пользовательский текст попадает в DOM через textContent (XSS!)',
+          'Версия в manifest.json увеличена для каждого выпуска'
+        ]
+      }
+    ]
   }
 }
 
 export function PluginDevGuideView(): JSX.Element {
   const { t, i18n } = useTranslation()
-  const lang = (['hu', 'en', 'de'].includes(i18n.language.slice(0, 2)) ? i18n.language.slice(0, 2) : 'en') as
+  const lang = (['hu', 'en', 'de', 'ru'].includes(i18n.language.slice(0, 2)) ? i18n.language.slice(0, 2) : 'en') as
     | 'hu'
     | 'en'
     | 'de'
+    | 'ru'
   const guide = useMemo(() => GUIDES[lang], [lang])
 
   const copySpec = (): void => {
@@ -522,13 +609,21 @@ export function PluginDevGuideView(): JSX.Element {
                     {SHAPES_CODE}
                   </pre>
                   <h3 className="mb-1 mt-4 text-sm font-bold">
-                    {{ hu: 'Példa kérések és válaszok', en: 'Example requests & responses', de: 'Beispiel-Anfragen und -Antworten' }[lang]}
+                    {
+                      {
+                        hu: 'Példa kérések és válaszok',
+                        en: 'Example requests & responses',
+                        de: 'Beispiel-Anfragen und -Antworten',
+                        ru: 'Примеры запросов и ответов'
+                      }[lang]
+                    }
                   </h3>
                   <p className="mb-2 text-xs text-muted-foreground">
                     {{
                       hu: 'Valósághű mintaadatokkal — a mezőnevek és a válaszborítékok innen másolhatók.',
                       en: 'With realistic sample data — copy field names and response envelopes from here.',
-                      de: 'Mit realistischen Beispieldaten — Feldnamen und Antwort-Umschläge hier abschreiben.'
+                      de: 'Mit realistischen Beispieldaten — Feldnamen und Antwort-Umschläge hier abschreiben.',
+                      ru: 'С реалистичными тестовыми данными — имена полей и обёртки ответов можно копировать отсюда.'
                     }[lang]}
                   </p>
                   <pre className="overflow-x-auto rounded-xl border border-border bg-secondary/50 p-3 font-mono text-xs leading-relaxed">

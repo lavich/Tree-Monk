@@ -3,7 +3,13 @@ import AdmZip from 'adm-zip'
 import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, normalize, resolve, sep } from 'node:path'
-import type { InstalledPlugin, PluginManifest, PluginPanelInfo, PluginScope } from '@shared/types'
+import type {
+  AppLanguage,
+  InstalledPlugin,
+  PluginManifest,
+  PluginPanelInfo,
+  PluginScope
+} from '@shared/types'
 import { getApiConfig, restartApiServer } from './api/server'
 
 /**
@@ -61,14 +67,22 @@ function persistRegistry(): void {
 
 // ---- Manifest ----
 
-/** TreeMonk ships in hu/en/de — user-facing plugin strings must too. */
-function requireTrilingual(v: unknown, what: string): Partial<Record<'hu' | 'en' | 'de', string>> {
+/** TreeMonk ships in hu/en/de/ru — user-facing plugin strings must cover the
+ *  original three (hard requirement, so older plugins keep working); ru is an
+ *  optional fourth that is passed through when the manifest provides it. */
+function requireTrilingual(v: unknown, what: string): Partial<Record<AppLanguage, string>> {
   const o = (v ?? {}) as Record<string, unknown>
   for (const lang of ['hu', 'en', 'de'] as const) {
     if (typeof o[lang] !== 'string' || !(o[lang] as string).trim())
       throw new Error(`${what} must be given in all three languages ({ "hu": …, "en": …, "de": … })`)
   }
-  return { hu: String(o.hu).trim(), en: String(o.en).trim(), de: String(o.de).trim() }
+  const out: Partial<Record<AppLanguage, string>> = {
+    hu: String(o.hu).trim(),
+    en: String(o.en).trim(),
+    de: String(o.de).trim()
+  }
+  if (typeof o.ru === 'string' && o.ru.trim()) out.ru = o.ru.trim()
+  return out
 }
 
 /** Validates an untrusted manifest.json; throws a user-readable error. */

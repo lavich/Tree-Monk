@@ -264,14 +264,15 @@ It runs as a **sandboxed iframe panel** inside the app:
   "description": {
     "hu": "Rövid leírás magyarul.",
     "en": "A short description in English.",
-    "de": "Eine kurze Beschreibung auf Deutsch."
+    "de": "Eine kurze Beschreibung auf Deutsch.",
+    "ru": "Краткое описание по-русски."
   },
   "icon": "icon.svg",
   "permissions": ["read"],
   "menu": [
     {
       "id": "main",
-      "title": { "hu": "Saját nézet", "en": "My view", "de": "Meine Ansicht" },
+      "title": { "hu": "Saját nézet", "en": "My view", "de": "Meine Ansicht", "ru": "Мой раздел" },
       "entry": "index.html"
     }
   ]
@@ -283,12 +284,13 @@ Rules (violations = install rejected):
   \`"sdk"\` is reserved.
 - \`name\`, \`version\`: non-empty strings.
 - \`description\`: an OBJECT with non-empty \`hu\`, \`en\` AND \`de\` strings.
-  A plain string or a missing language is rejected.
+  A plain string or a missing one of those three is rejected. \`ru\` is an
+  OPTIONAL fourth language — include it when you can, but it is never required.
 - \`permissions\`: array; allowed values only \`"read"\`, \`"write"\`,
   \`"documents"\`. Request ONLY what you use.
 - \`menu\`: at least one entry. Each entry: \`id\` (slug), \`title\` (OBJECT
-  with non-empty hu+en+de — enforced), \`entry\` (relative path to an .html
-  file inside the zip; no "..").
+  with non-empty hu+en+de — enforced; optional \`ru\` allowed), \`entry\`
+  (relative path to an .html file inside the zip; no "..").
 - \`icon\` (optional): an svg/png/webp path inside the zip, or an emoji.
   Prefer a Lucide-style SVG (24×24 viewBox, fill="none", stroke="#000",
   stroke-width 2, stroke-linecap/linejoin round) — the app renders it as a
@@ -302,7 +304,7 @@ The entry page receives its configuration in the **URL hash**:
 |---|---|
 | \`api\`   | \`http://127.0.0.1:<port>\` — local API base |
 | \`token\` | the plugin's scoped Bearer token |
-| \`lang\`  | \`hu\` \\| \`en\` \\| \`de\` — current app language |
+| \`lang\`  | \`hu\` \\| \`en\` \\| \`de\` \\| \`ru\` — current app language |
 | \`theme\` | \`light\` \\| \`dark\` — current app theme |
 
 ## The official SDK (use it)
@@ -577,7 +579,7 @@ installer rejects it, it shows the exact validator message — fix and re-zip.
 
 ## Final checklist (verify before you output)
 
-- [ ] description + every menu title has non-empty hu, en AND de
+- [ ] description + every menu title has non-empty hu, en AND de (ru optional)
 - [ ] every visible string uses TM.t({...})
 - [ ] SDK css+js loaded from tmplugin://sdk/…, colors only via --tm-* vars
 - [ ] user data rendered via textContent (no HTML injection)
