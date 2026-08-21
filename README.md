@@ -18,7 +18,7 @@ machine**, no cloud, no account, your data never leaves your computer.
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-555)
 
-Available in **English · Deutsch · Magyar** — auto-detected on first launch.
+Available in **English · Deutsch · Magyar · Русский** — auto-detected on first launch.
 
 </div>
 
@@ -30,7 +30,7 @@ Available in **English · Deutsch · Magyar** — auto-detected on first launch.
   No cloud, no account, no telemetry — your family data stays with you.
 - **🆓 Free.** Free for personal and other noncommercial use, forever
   (see [License](#-license)).
-- **🌍 Multilingual.** Full English, German and Hungarian UI (auto-detected on first launch).
+- **🌍 Multilingual.** Full English, German, Hungarian and Russian UI (auto-detected on first launch).
 - **🪶 Lightweight & offline.** Works without an internet connection (map tiles
   being the obvious exception).
 - **🔌 Yours to automate.** An optional, local-only **HTTP API**
@@ -119,7 +119,7 @@ edit people, families and life events.
   undo history are kept), and open windows refresh live.
 - **Self-documenting**: with the server enabled, open
   `http://127.0.0.1:27007/docs` for the built-in offline documentation
-  (English · Deutsch · Magyar) and `http://127.0.0.1:27007/api/v1/openapi.json`
+  (English · Deutsch · Magyar · Русский) and `http://127.0.0.1:27007/api/v1/openapi.json`
   for the OpenAPI 3.1 spec.
 No online service and no built-in AI are involved — this only lets tools *you*
 choose, running on *your* machine, talk to your local database.

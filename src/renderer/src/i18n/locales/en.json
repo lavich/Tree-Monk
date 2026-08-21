@@ -1774,7 +1774,7 @@
           },
           {
             "h": "Appearance and language",
-            "p": "In the top bar, the sun/moon icon toggles the light and dark theme, and next to it you set the interface language (Hungarian, English or German)."
+            "p": "In the top bar, the sun/moon icon toggles the light and dark theme, and next to it you set the interface language (Hungarian, English, German or Russian)."
           },
           {
             "h": "Shortcuts",
@@ -2279,7 +2279,7 @@
       "title": "Add plugin",
       "step1Intro": "Before you install, here is what to know:",
       "reqSandbox": "Plugins run in a sandboxed panel: they can only reach the local API with their own scoped token — no external network, so your data cannot leave this machine.",
-      "reqLangs": "A valid plugin provides its description and menu entries in three languages (Hungarian, English, German) — the installer rejects it otherwise.",
+      "reqLangs": "A valid plugin provides its description and menu entries in three languages (Hungarian, English, German) — the installer rejects it otherwise. Russian is an optional fourth.",
       "reqTheme": "It must follow BOTH light and dark themes — automatic with the official style kit.",
       "reqZip": "A plugin is a single .zip file (with a manifest.json inside). After installing it is listed disabled.",
       "step2Intro": "Pick the plugin's .zip file. The installer validates the manifest — if it is invalid, we show exactly what is wrong.",
