@@ -89,18 +89,56 @@ export function parseCoord(raw: string | null): number | null {
   return Number.isFinite(v) ? v : null
 }
 
-/** Walks the whole record tree, yielding every PLAC node that carries MAP/LATI/LONG. */
-export function collectPlaces(
-  roots: GedNode[]
-): { name: string; lat: number; lon: number }[] {
-  const out: { name: string; lat: number; lon: number }[] = []
+export interface GedPlace {
+  name: string
+  lat: number | null
+  lon: number | null
+  /** GOV id (gov.genealogy.net) from a shared `_LOC` place record. */
+  govId: string | null
+  /** The `_LOC` record's primary NAME when a PLAC spelling references one —
+   *  the source file's own "this spelling means THAT place" mapping. */
+  canonical: string | null
+}
+
+/**
+ * Walks the whole record tree, yielding every place the file knows something
+ * about: PLAC nodes with inline MAP coordinates, plus the shared place records
+ * of the German GEDCOM-L extension (`0 @L1@ _LOC` — written by
+ * the German genealogy programs) with their coordinates and GOV id. A PLAC carrying a
+ * `_LOC @L1@` pointer inherits that record's data.
+ */
+export function collectPlaces(roots: GedNode[]): GedPlace[] {
+  const locByXref = new Map<string, { name: string; lat: number | null; lon: number | null; govId: string | null }>()
+  for (const r of roots) {
+    if (r.tag !== '_LOC' || !r.xref) continue
+    const name = childValue(r, 'NAME')?.trim()
+    if (!name) continue
+    const map = child(r, 'MAP')
+    locByXref.set(r.xref, {
+      name,
+      lat: map ? parseCoord(childValue(map, 'LATI')) : null,
+      lon: map ? parseCoord(childValue(map, 'LONG')) : null,
+      govId: childValue(r, '_GOV')?.trim() || null
+    })
+  }
+  const out: GedPlace[] = []
+  for (const loc of locByXref.values()) out.push({ ...loc, canonical: null })
   const walk = (node: GedNode): void => {
     if (node.tag === 'PLAC' && node.value) {
+      const name = node.value.trim()
       const map = child(node, 'MAP')
-      if (map) {
-        const lat = parseCoord(childValue(map, 'LATI'))
-        const lon = parseCoord(childValue(map, 'LONG'))
-        if (lat !== null && lon !== null) out.push({ name: node.value.trim(), lat, lon })
+      let lat = map ? parseCoord(childValue(map, 'LATI')) : null
+      let lon = map ? parseCoord(childValue(map, 'LONG')) : null
+      const locPtr = childValue(node, '_LOC')
+      const loc = locPtr ? locByXref.get(locPtr) : undefined
+      if (loc) {
+        if (lat === null || lon === null) {
+          lat = loc.lat
+          lon = loc.lon
+        }
+        out.push({ name, lat, lon, govId: loc.govId, canonical: loc.name !== name ? loc.name : null })
+      } else if (lat !== null && lon !== null) {
+        out.push({ name, lat, lon, govId: null, canonical: null })
       }
     }
     node.children.forEach(walk)

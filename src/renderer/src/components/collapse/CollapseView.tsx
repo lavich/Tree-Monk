@@ -10,7 +10,9 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GitMerge, Route } from 'lucide-react'
+import { FileDown, GitMerge, Route } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { PersonAvatar } from '@/components/common/PersonAvatar'
 import { PersonSelect } from '@/components/kinship/RelationshipView'
 import { PanZoom } from '@/components/tree/PanZoom'
@@ -87,6 +89,52 @@ export function CollapseView(): JSX.Element {
   }, [result])
 
   const selected = result?.collapsed.find((c) => c.personId === selectedId) ?? null
+
+  /** Printable report: the stats, the FULL collapsed-ancestor list, and every
+   *  root→ancestor path of the selected one — the graph, in prose. */
+  const exportPdf = async (): Promise<void> => {
+    if (!result || !rootId) return
+    const esc = (x: string): string =>
+      x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const nameOf = (id: string): string => {
+      const p = byId.get(id)
+      if (!p) return '—'
+      const b = p.birthDate?.match(/(\d{4})/)?.[1] ?? ''
+      const d = p.deathDate?.match(/(\d{4})/)?.[1] ?? ''
+      return esc(fullName(p)) + (b || d ? ` (${b || '?'}–${d || ''})` : '')
+    }
+    const rows = result.collapsed
+      .map(
+        (c) =>
+          `<tr><td>${nameOf(c.personId)}</td><td class="n">×${c.count}</td>` +
+          `<td class="n">${c.occurrences[0].gen}</td>` +
+          `<td class="sosa">${c.occurrences.map((o) => o.sosa).join(', ')}</td></tr>`
+      )
+      .join('')
+    const sel = selected
+      ? `<h2>${nameOf(selected.personId)} — ${esc(t('collapse.pdfPaths'))}</h2>` +
+        selected.occurrences
+          .map((o) => `<p class="side">Sosa ${o.sosa}: ${sosaPath(rootId, o.sosa, parents).map(nameOf).join(' → ')}</p>`)
+          .join('')
+      : ''
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      @page { size: A4; margin: 16mm 14mm; }
+      body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1c2b27; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 2px; } h2 { font-size: 14px; margin: 16px 0 6px; }
+      .sub { color: #667; margin: 0 0 10px; }
+      table { border-collapse: collapse; width: 100%; } td, th { border-bottom: 1px solid #dde; padding: 3px 6px; text-align: left; vertical-align: top; }
+      th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: #667; }
+      .n { text-align: right; white-space: nowrap; } .sosa { color: #667; }
+      .side { margin: 3px 0; page-break-inside: avoid; }
+    </style></head><body>
+      <h1>${esc(t('collapse.title'))} — ${nameOf(rootId)}</h1>
+      <p class="sub">${esc(t('collapse.generations'))}: ${result.generations} · ${esc(t('collapse.positions'))}: ${result.positions} · ${esc(t('collapse.distinct'))}: ${result.distinct} · Implex: ${result.implexPct.toFixed(1)}%</p>
+      <table><thead><tr><th>${esc(t('collapse.person'))}</th><th class="n">×</th><th class="n">Gen</th><th>Sosa</th></tr></thead><tbody>${rows}</tbody></table>
+      ${sel}
+    </body></html>`
+    const res = await window.api.dashboard.exportPdf(html, `ahnenschwund-${fullName(byId.get(rootId)!)}`)
+    if (res) toast.success(t('collapse.pdfDone', { path: res.path }))
+  }
 
   /**
    * Merged-path graph for the selected ancestor. Nodes shared by several paths
@@ -196,6 +244,12 @@ export function CollapseView(): JSX.Element {
           <h1 className="text-lg font-semibold leading-tight">{t('collapse.title')}</h1>
           <p className="truncate text-xs text-muted-foreground">{t('collapse.subtitle')}</p>
         </div>
+        {result && result.collapsed.length > 0 && (
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void exportPdf()}>
+            <FileDown className="h-4 w-4" />
+            PDF
+          </Button>
+        )}
       </header>
 
       {/* Toolbar: person picker + compact stats */}

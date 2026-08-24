@@ -2,6 +2,37 @@
 
 All notable changes to TreeMonk are documented here.
 
+## [1.10.0]
+
+### Added
+- **Complete GEDCOM export**: sources (uncited ones included), citations at
+  every position (NAME, BIRT, CHR, DEAT, BURI, OCCU, RESI, EVEN, MARR, ENGA,
+  DIV — with PAGE/QUAY/DATA and link details), repositories, source notes and
+  the SUBM submitter record are all written out; unmatched citations fall back
+  to record level instead of being dropped. Prompted by a detailed GitHub
+  report.
+- **GEDCOM-L place records (GOV)**: `_LOC` records are read on import —
+  coordinates and GOV ids (gov.genealogy.net) land in the gazetteer, spelling
+  variants referencing the same record link up through the canonical mapping
+  layer, and no geocoding is needed for carried coordinates. Export writes
+  standard inline MAP coordinates plus `_LOC`/`_GOV` records back, so the
+  place registry round-trips losslessly.
+- **Migration animation** on the map: a starting person's ancestors wander
+  the timeline in seven color-coded branches (parents + four grandparent
+  lines); relocations draw as curved trails with play/pause and adjustable
+  speed, the historical basemap's borders follow the animation year, and
+  **meeting points** mark where the paternal and maternal lines overlapped in
+  space and time.
+- **All blood connections** in the relationship finder: every nearest common
+  ancestor (couples grouped), not just the shortest path — plus PDF export
+  for both the relationship view and the pedigree-collapse view.
+
+### Fixed
+- GEDCOM import: nameless placeholder spouses are kept (families no longer
+  lose a partner), NICK under NAME is read, CONF/ENGA/MARB/EMIG become
+  structured events, citation DATA.WWW links and source-record notes are
+  preserved, and OBJE record pointers with relative media paths resolve.
+
 ## [1.9.0]
 
 ### Added
@@ -129,7 +160,7 @@ All notable changes to TreeMonk are documented here.
 
 ### Fixed
 - **GEDCOM person notes were imported invisibly**: person-level NOTEs (inline
-  and @N@ pointer records — Ahnenblatt/Heredis/PAF) now land in the profile's
+  and @N@ pointer records — Heredis/PAF & co.) now land in the profile's
   visible notes field (non-destructive merge on re-import via `fillFrom`), and
   the export writes linked note records too — as proper multi-line CONT/CONC
   structures instead of newline-flattened text.

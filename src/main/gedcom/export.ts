@@ -1,6 +1,6 @@
 import { writeFileSync, copyFileSync, mkdirSync, existsSync } from 'fs'
 import { dirname, extname, join } from 'path'
-import { Aliases, Attributes, Documents, EventParticipants, Events, Families, Godparents, Notes, Occupations, People, Witnesses } from '../db/repo'
+import { Aliases, Attributes, Citations, Documents, EventParticipants, Events, Families, Godparents, Notes, Occupations, People, Places, Repositories, Sources, Witnesses } from '../db/repo'
 import { resolveMediaPath } from '../db/connection'
 import type { Alias, DocumentRecord, EventRecord, Occupation, Person } from '@shared/types'
 
@@ -208,6 +208,67 @@ export function exportGedcom(
   })
   const famXref = assignXrefs(families, 'F', usedXrefs)
 
+  // Sources + repositories go out as REAL records. This was the reported
+  // 23/55-construct hole: the importer stored every source, citation, QUAY and
+  // repository correctly, and the writer silently dropped all of it — a tree
+  // could not be backed up or migrated via GEDCOM without losing its sourcing.
+  // ALL sources are exported (even ones nothing cites, and on a scoped export
+  // too): a source is research work in its own right, never derived data.
+  const sources = Sources.list()
+  const srcXref = assignXrefs(sources, 'S', usedXrefs)
+  const repositories = Repositories.list()
+  const repoXref = assignXrefs(repositories, 'R', usedXrefs)
+  let subXref = '@SUB1@'
+  for (let n = 1; usedXrefs.has(subXref); n++) subXref = `@SUB${n}@`
+  usedXrefs.add(subXref)
+
+  /** Single tag whose text may span lines (TITL/TEXT/ADDR…): newline → CONT. */
+  const pushTagText = (level: number, tag: string, text: string): void => {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n')
+    out.push(line(level, tag, lines[0] || undefined))
+    for (const l of lines.slice(1)) out.push(line(level + 1, 'CONT', l || undefined))
+  }
+
+  /** One citation, exactly the shape the import reads back: SOUR pointer +
+   *  PAGE + QUAY + NOTE. A source-less citation still writes its PAGE/NOTE. */
+  const pushCitation = (
+    c: { sourceId: string | null; page: string | null; quality: string | null; note: string | null },
+    level: number
+  ): void => {
+    const sx = c.sourceId ? srcXref.get(c.sourceId) : undefined
+    out.push(line(level, 'SOUR', sx))
+    if (c.page) out.push(line(level + 1, 'PAGE', c.page))
+    if (c.quality) out.push(line(level + 1, 'QUAY', c.quality))
+    if (c.note) pushNote(out, level + 1, c.note)
+  }
+
+  /** An owner's citations bucketed by event tag ('' = record-level). Buckets are
+   *  DELETED as they are written, so whatever an exporter section didn't claim
+   *  falls through to the record level instead of being lost. */
+  const citationBuckets = (
+    ownerType: 'person' | 'family',
+    ownerId: string
+  ): Map<string, { sourceId: string | null; page: string | null; quality: string | null; note: string | null }[]> => {
+    const m = new Map<string, { sourceId: string | null; page: string | null; quality: string | null; note: string | null }[]>()
+    for (const c of Citations.forOwner(ownerType, ownerId)) {
+      const key = (c.eventTag ?? '').toUpperCase()
+      const arr = m.get(key) ?? []
+      arr.push({ sourceId: c.sourceId, page: c.page, quality: c.quality, note: c.note })
+      m.set(key, arr)
+    }
+    return m
+  }
+  const takeCites = (
+    m: Map<string, { sourceId: string | null; page: string | null; quality: string | null; note: string | null }[]>,
+    level: number,
+    ...tags: string[]
+  ): void => {
+    for (const tag of tags) {
+      for (const c of m.get(tag) ?? []) pushCitation(c, level)
+      m.delete(tag)
+    }
+  }
+
   // Shared-event participants as a custom sub-structure (readers ignore the
   // underscore tag; our import restores person + role).
   const pushParticipants = (eventId: string, level: number): void => {
@@ -216,6 +277,41 @@ export function exportGedcom(
       out.push(line(level, '_PART', xref.get(pt.personId)))
       if (pt.role) out.push(line(level + 1, 'ROLE', pt.role))
     }
+  }
+
+  // Places: every PLAC gets the standard inline MAP coordinates, plus a
+  // pointer to a shared `_LOC` place record (German GEDCOM-L extension) that
+  // carries the coordinates and the GOV id (gov.genealogy.net) — so GEDCOM-L
+  // readers re-import their place registry losslessly. Spellings mapped to the
+  // same canonical place converge on ONE _LOC record, like the source programs
+  // do. Readers that don't know _LOC skip it (underscore tag) and still get MAP.
+  const placeRows = new Map(Places.list().map((r) => [r.name, r]))
+  const fmtLati = (v: number): string => `${v < 0 ? 'S' : 'N'}${Math.abs(v).toFixed(6)}`
+  const fmtLong = (v: number): string => `${v < 0 ? 'W' : 'E'}${Math.abs(v).toFixed(6)}`
+  const locXref = new Map<string, string>()
+  const locRecs: { x: string; name: string; lat: number; lon: number; govId: string | null }[] = []
+  const pushPlace = (level: number, name: string): void => {
+    out.push(line(level, 'PLAC', name))
+    const row = placeRows.get(name.trim())
+    if (!row) return
+    const eff = (row.canonical && placeRows.get(row.canonical)) || row
+    if (Number.isFinite(row.lat) && Number.isFinite(row.lon)) {
+      out.push(line(level + 1, 'MAP'))
+      out.push(line(level + 2, 'LATI', fmtLati(row.lat)))
+      out.push(line(level + 2, 'LONG', fmtLong(row.lon)))
+    }
+    const govId = eff.gov_id ?? row.gov_id ?? null
+    let x = locXref.get(eff.name)
+    if (!x) {
+      x = `@L${locXref.size + 1}@`
+      locXref.set(eff.name, x)
+      locRecs.push({ x, name: eff.name, lat: eff.lat, lon: eff.lon, govId })
+    } else if (govId) {
+      // A later spelling may carry the GOV id the record was created without.
+      const rec = locRecs.find((r) => r.x === x)
+      if (rec && !rec.govId) rec.govId = govId
+    }
+    out.push(line(level + 1, '_LOC', x))
   }
 
   // Reverse lookups: person -> families they belong to. Spouse families are
@@ -283,6 +379,8 @@ export function exportGedcom(
   out.push(line(2, 'VERS', '5.5.1'))
   out.push(line(2, 'FORM', 'LINEAGE-LINKED'))
   out.push(line(1, 'CHAR', 'UTF-8'))
+  // 5.5.1 requires a submitter; validators flag a file without one.
+  out.push(line(1, 'SUBM', subXref))
 
   for (const p of people) {
     out.push(line(0, `${xref.get(p.id)} INDI`))
@@ -295,12 +393,24 @@ export function exportGedcom(
       for (const fx of childIn.get(p.id) ?? []) out.push(line(1, 'FAMC', fx))
       continue
     }
-    out.push(line(1, 'NAME', nameValue(p)))
+    // Everything this person's research cites, bucketed by fact tag. Buckets
+    // are consumed by the sections below; the remainder lands at INDI level so
+    // a citation can never fall between two chairs.
+    const cites = citationBuckets('person', p.id)
+    // A placeholder spouse may have NO name at all. 5.5.1 makes NAME optional —
+    // writing a bare "//" instead used to make some readers drop the person,
+    // leaving their family a partner short.
+    const nm = nameValue(p)
+    if (nm !== '//') out.push(line(1, 'NAME', nm))
     // Name pieces: prefix/suffix as the standard NPFX/NSFX, the Rufname as the
     // _RUFNAME custom tag Gramps & the German genealogy programs use.
-    if (p.namePrefix) out.push(line(2, 'NPFX', p.namePrefix))
-    if (p.nameSuffix) out.push(line(2, 'NSFX', p.nameSuffix))
-    if (p.callName) out.push(line(2, '_RUFNAME', p.callName))
+    if (nm !== '//') {
+      if (p.namePrefix) out.push(line(2, 'NPFX', p.namePrefix))
+      if (p.nameSuffix) out.push(line(2, 'NSFX', p.nameSuffix))
+      if (p.callName) out.push(line(2, '_RUFNAME', p.callName))
+      // A source that proves a SPELLING cites the name itself (GEDCOM allows it).
+      takeCites(cites, 2, 'NAME')
+    }
     // Name variations as additional NAME records.
     for (const a of aliasByPerson.get(p.id) ?? []) {
       out.push(line(1, 'NAME', `${a.givenName} /${a.surname}/`.trim()))
@@ -309,37 +419,41 @@ export function exportGedcom(
     if (p.sex !== 'U') out.push(line(1, 'SEX', p.sex))
     // Vital events, each with its per-fact research note when present.
     const birthNote = flatNote(p.birthNote)
-    if (p.birthDate || p.birthPlace || birthNote) {
+    if (p.birthDate || p.birthPlace || birthNote || cites.has('BIRT')) {
       out.push(line(1, 'BIRT'))
       if (p.birthDate) out.push(line(2, 'DATE', p.birthDate))
-      if (p.birthPlace) out.push(line(2, 'PLAC', p.birthPlace))
+      if (p.birthPlace) pushPlace(2, p.birthPlace)
       if (birthNote) out.push(line(2, 'NOTE', birthNote))
+      takeCites(cites, 2, 'BIRT')
     }
     const chrNote = flatNote(p.christeningNote)
-    if (p.christeningDate || p.christeningPlace || chrNote) {
+    if (p.christeningDate || p.christeningPlace || chrNote || cites.has('CHR') || cites.has('BAPM')) {
       out.push(line(1, 'CHR'))
       if (p.christeningDate) out.push(line(2, 'DATE', p.christeningDate))
-      if (p.christeningPlace) out.push(line(2, 'PLAC', p.christeningPlace))
+      if (p.christeningPlace) pushPlace(2, p.christeningPlace)
       if (chrNote) out.push(line(2, 'NOTE', chrNote))
+      takeCites(cites, 2, 'CHR', 'BAPM')
     }
     const deathNote = flatNote(p.deathNote)
-    if (p.deceased || p.deathDate || p.deathPlace || deathNote) {
+    if (p.deceased || p.deathDate || p.deathPlace || deathNote || cites.has('DEAT')) {
       if (p.deathDate || p.deathPlace) {
         out.push(line(1, 'DEAT'))
         if (p.deathDate) out.push(line(2, 'DATE', p.deathDate))
-        if (p.deathPlace) out.push(line(2, 'PLAC', p.deathPlace))
+        if (p.deathPlace) pushPlace(2, p.deathPlace)
       } else {
         // Deceased, date unknown → `1 DEAT Y` asserts the event occurred (5.5.1).
         out.push(line(1, 'DEAT', 'Y'))
       }
       if (deathNote) out.push(line(2, 'NOTE', deathNote))
+      takeCites(cites, 2, 'DEAT')
     }
     const burialNote = flatNote(p.burialNote)
-    if (p.burialDate || p.burialPlace || burialNote) {
+    if (p.burialDate || p.burialPlace || burialNote || cites.has('BURI')) {
       out.push(line(1, 'BURI'))
       if (p.burialDate) out.push(line(2, 'DATE', p.burialDate))
-      if (p.burialPlace) out.push(line(2, 'PLAC', p.burialPlace))
+      if (p.burialPlace) pushPlace(2, p.burialPlace)
       if (burialNote) out.push(line(2, 'NOTE', burialNote))
+      takeCites(cites, 2, 'BURI')
     }
     if (p.illegitimate) out.push(line(1, '_ILLEGITIMATE', 'Y'))
     if (p.stillborn) out.push(line(1, '_STILLBORN', 'Y'))
@@ -354,15 +468,19 @@ export function exportGedcom(
       if (ev.type.toLowerCase() === 'residence') {
         out.push(line(1, 'RESI'))
         if (period) out.push(line(2, 'DATE', period))
-        if (ev.place) out.push(line(2, 'PLAC', ev.place))
+        if (ev.place) pushPlace(2, ev.place)
         if (ev.value) out.push(line(2, 'NOTE', flatNote(ev.value)!))
         else if (note) out.push(line(2, 'NOTE', note))
+        // Tag-matched citations ride on the FIRST such node (the bucket
+        // empties, so later nodes don't repeat them).
+        takeCites(cites, 2, 'RESI')
       } else {
         out.push(line(1, 'EVEN', ev.value ? flatNote(ev.value) ?? undefined : undefined))
         out.push(line(2, 'TYPE', ev.type))
         if (period) out.push(line(2, 'DATE', period))
-        if (ev.place) out.push(line(2, 'PLAC', ev.place))
+        if (ev.place) pushPlace(2, ev.place)
         if (note) out.push(line(2, 'NOTE', note))
+        takeCites(cites, 2, 'EVEN', 'CONF')
       }
       pushParticipants(ev.id, 2)
     }
@@ -371,6 +489,7 @@ export function exportGedcom(
       out.push(line(1, 'OCCU', occ.title))
       const period = periodValue(occ)
       if (period) out.push(line(2, 'DATE', period))
+      takeCites(cites, 2, 'OCCU')
     }
     // Free-form attributes as the generic 5.5.1 attribute: FACT <value> / TYPE <key>.
     for (const attr of Attributes.forPerson(p.id)) {
@@ -407,6 +526,11 @@ export function exportGedcom(
       out.push(line(1, 'ASSO', xref.get(wid)))
       out.push(line(2, 'RELA', 'christening witness'))
     }
+    // Whatever is still in the buckets (record-level '' and any tag with no
+    // exported node — e.g. a CENS citation on a person with no census event)
+    // goes out at INDI level: less precise, never lost.
+    for (const [, arr] of cites) for (const c of arr) pushCitation(c, 1)
+    cites.clear()
     for (const fx of spouseIn.get(p.id) ?? []) out.push(line(1, 'FAMS', fx))
     for (const fx of childIn.get(p.id) ?? []) {
       out.push(line(1, 'FAMC', fx))
@@ -438,10 +562,14 @@ export function exportGedcom(
     // A union with a living, anonymized spouse withholds its facts too — the
     // couple + children structure stays, dates/places/witnesses/events don't.
     const anonFam = famHasLiving(f.husbandId, f.wifeId)
-    if (!anonFam && (f.marriageDate || f.marriagePlace)) {
+    const fcites = anonFam
+      ? new Map<string, { sourceId: string | null; page: string | null; quality: string | null; note: string | null }[]>()
+      : citationBuckets('family', f.id)
+    if (!anonFam && (f.marriageDate || f.marriagePlace || fcites.has('MARR'))) {
       out.push(line(1, 'MARR'))
       if (f.marriageDate) out.push(line(2, 'DATE', f.marriageDate))
-      if (f.marriagePlace) out.push(line(2, 'PLAC', f.marriagePlace))
+      if (f.marriagePlace) pushPlace(2, f.marriagePlace)
+      takeCites(fcites, 2, 'MARR')
     }
     // Notes written about the COUPLE itself. Withheld for an anonymized union,
     // like every other fact of it.
@@ -468,10 +596,11 @@ export function exportGedcom(
         out.push(line(2, 'TYPE', ev.type))
       }
       if (period) out.push(line(2, 'DATE', period))
-      if (ev.place) out.push(line(2, 'PLAC', ev.place))
+      if (ev.place) pushPlace(2, ev.place)
       // A standard tag carries no payload — its text value travels as a NOTE.
       if (std && value) out.push(line(2, 'NOTE', value))
       if (note) out.push(line(2, 'NOTE', note))
+      takeCites(fcites, 2, std ?? 'EVEN')
       pushParticipants(ev.id, 2)
     }
     // Family-linked note records (GEDCOM-imported) — withheld for a union with
@@ -481,6 +610,45 @@ export function exportGedcom(
         if (n.text.trim()) pushNote(out, 1, n.text.trim())
       }
     }
+    // Record-level and unmatched family citations — FAM level, never lost.
+    for (const [, arr] of fcites) for (const c of arr) pushCitation(c, 1)
+    fcites.clear()
+  }
+
+  // ---- Records: submitter, sources, repositories --------------------------
+  out.push(line(0, `${subXref} SUBM`))
+  out.push(line(1, 'NAME', 'TreeMonk'))
+  for (const src of sources) {
+    out.push(line(0, `${srcXref.get(src.id)} SOUR`))
+    if (src.title) pushTagText(1, 'TITL', src.title)
+    if (src.author) pushTagText(1, 'AUTH', src.author)
+    if (src.publication) pushTagText(1, 'PUBL', src.publication)
+    if (src.text) pushTagText(1, 'TEXT', src.text)
+    if (src.recordDate) {
+      out.push(line(1, 'DATA'))
+      out.push(line(2, 'DATE', src.recordDate))
+    }
+    if (src.repositoryId && repoXref.has(src.repositoryId)) {
+      out.push(line(1, 'REPO', repoXref.get(src.repositoryId)))
+    }
+  }
+  for (const rep of repositories) {
+    out.push(line(0, `${repoXref.get(rep.id)} REPO`))
+    if (rep.name) pushTagText(1, 'NAME', rep.name)
+    if (rep.address) pushTagText(1, 'ADDR', rep.address)
+  }
+
+  // Shared place records referenced by the _LOC pointers above (coordinates +
+  // GOV id) — one per canonical place, GEDCOM-L style.
+  for (const rec of locRecs) {
+    out.push(line(0, `${rec.x} _LOC`))
+    out.push(line(1, 'NAME', rec.name))
+    if (Number.isFinite(rec.lat) && Number.isFinite(rec.lon)) {
+      out.push(line(1, 'MAP'))
+      out.push(line(2, 'LATI', fmtLati(rec.lat)))
+      out.push(line(2, 'LONG', fmtLong(rec.lon)))
+    }
+    if (rec.govId) out.push(line(1, '_GOV', rec.govId))
   }
 
   out.push(line(0, 'TRLR'))

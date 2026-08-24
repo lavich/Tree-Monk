@@ -1248,6 +1248,17 @@ export const Repositories = {
       | { id: string; gedcom_id: string | null; name: string; address: string | null }
       | undefined
     return r ? { id: r.id, gedcomId: r.gedcom_id, name: r.name, address: r.address } : null
+  },
+  /** Every repository — the GEDCOM export writes them as REPO records. */
+  list(): Repository[] {
+    return (
+      getDb().prepare('SELECT * FROM repositories ORDER BY name COLLATE NOCASE').all() as {
+        id: string
+        gedcom_id: string | null
+        name: string
+        address: string | null
+      }[]
+    ).map((r) => ({ id: r.id, gedcomId: r.gedcom_id, name: r.name, address: r.address }))
   }
 }
 
@@ -1500,6 +1511,23 @@ export const Places = {
    *  ever rewritten; see geo.standardizePlaces). */
   setCanonical(name: string, canonical: string): void {
     getDb().prepare('UPDATE places SET canonical = ? WHERE name = ?').run(canonical.trim() || null, name.trim())
+  },
+  /** GEDCOM-derived place metadata (GEDCOM-L `_LOC` records). The GOV
+   *  id always wins — the source file is the authority on its own registry —
+   *  but canonical only fills an EMPTY slot, so a hand-curated mapping is
+   *  never clobbered by a re-import. No-op for places the gazetteer doesn't
+   *  hold (rows require coordinates). */
+  adoptGedcomMeta(name: string, meta: { govId?: string | null; canonical?: string | null }): void {
+    const key = name.trim()
+    if (!key) return
+    const db = getDb()
+    if (meta.govId?.trim())
+      db.prepare('UPDATE places SET gov_id = ? WHERE name = ?').run(meta.govId.trim(), key)
+    if (meta.canonical?.trim())
+      db.prepare('UPDATE places SET canonical = ? WHERE name = ? AND canonical IS NULL').run(
+        meta.canonical.trim(),
+        key
+      )
   },
   get(name: string): PlaceRow | null {
     return (

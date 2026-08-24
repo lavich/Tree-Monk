@@ -588,7 +588,10 @@
     "genShort": "gen {{n}}",
     "sosaHint": "Ahnentafel (Sosa) position",
     "legendFather": "Father line",
-    "legendMother": "Mother line"
+    "legendMother": "Mother line",
+    "pdfPaths": "Paths",
+    "pdfDone": "PDF saved: {{path}}",
+    "person": "Person"
   },
   "kinship": {
     "title": "Relationship finder",
@@ -670,7 +673,12 @@
       "cousin": "cousin",
       "cousinComplex": "cousin (degree {{degree}}, {{removed}}× removed)"
     },
-    "byMarriage": "by marriage"
+    "byMarriage": "by marriage",
+    "bloodTitle": "Blood connections ({{count}})",
+    "bloodShortest": "Shortest path",
+    "bloodChipHint": "Click to draw this blood route on the canvas — up to the common ancestor, down to the other person.",
+    "bloodTruncated": "Part of the tree was cut by the safety cap — the list may be incomplete.",
+    "pdfDone": "PDF saved: {{path}}"
   },
   "issues": {
     "tabGivenNames": "Given names",
@@ -2227,6 +2235,27 @@
     "emptyTitle": "Nothing to plot yet",
     "emptyHint": "Place names need coordinates — run geocoding to pin them.",
     "geocode": "Geocode places",
+    "mig": {
+      "title": "Migration (animation)",
+      "subtitle": "Ancestor branches wandering across generations",
+      "pickRoot": "Pick the starting person — their ancestors will wander across the map",
+      "changeRoot": "Different starting person",
+      "speed": "Speed",
+      "yps": "yrs/s",
+      "meetings": "Meeting points",
+      "noMeetings": "The paternal and maternal branches were never in the same place at the same time.",
+      "people": "{{count}} people",
+      "empty": "This person has no dated, mappable ancestor events.",
+      "branch": {
+        "root": "Start",
+        "father": "Father",
+        "mother": "Mother",
+        "ff": "Paternal grandfather's line",
+        "fm": "Paternal grandmother's line",
+        "mf": "Maternal grandfather's line",
+        "mm": "Maternal grandmother's line"
+      }
+    },
     "base": {
       "auto": "Auto",
       "light": "Light",

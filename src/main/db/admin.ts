@@ -77,8 +77,16 @@ export function removeDisconnectedImports(newFids: string[], keepPersonId: strin
   return removed
 }
 
-export function removeNamelessStubs(): number {
+export function removeNamelessStubs(opts: { keepSpouses?: boolean } = {}): number {
   const db = getDb()
+  // `keepSpouses`: a GEDCOM file legitimately contains placeholder spouses with
+  // no NAME at all — deleting them left families a partner short (reported).
+  // The FamilySearch import keeps the old behaviour: ITS nameless spouses are
+  // partial-fetch artifacts, not data.
+  const spouseGuard = opts.keepSpouses
+    ? `AND id NOT IN (SELECT husband_id FROM families WHERE husband_id IS NOT NULL)
+       AND id NOT IN (SELECT wife_id FROM families WHERE wife_id IS NOT NULL)`
+    : ''
   const res = db
     .prepare(
       `DELETE FROM people
@@ -86,7 +94,8 @@ export function removeNamelessStubs(): number {
          AND coalesce(birth_date, '') = '' AND coalesce(death_date, '') = ''
          AND coalesce(christening_date, '') = ''
          AND coalesce(fs_id, '') = ''
-         AND id NOT IN (SELECT child_id FROM family_children)`
+         AND id NOT IN (SELECT child_id FROM family_children)
+         ${spouseGuard}`
     )
     .run()
   db.prepare(

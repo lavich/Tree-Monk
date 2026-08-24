@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowRight, ChevronDown, ChevronRight, Heart, Loader2, Route, Search, Users, X } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronRight, FileDown, Heart, Loader2, Network, Route, Search, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PersonAvatar } from '@/components/common/PersonAvatar'
 import { useAppStore } from '@/store/useAppStore'
+import { toast } from 'sonner'
 import { cn, fullName } from '@/lib/utils'
 import { PanZoom } from '@/components/tree/PanZoom'
 import { relationTerm } from '@/lib/kinship'
+import { computeBloodConnections, type BloodConnection, type BloodResult } from '@/lib/bloodConnections'
 import type { Person, RelationKind, RelationshipPath } from '@shared/types'
 
 const PICK_CAP = 50
@@ -141,6 +143,12 @@ export function RelationshipView(): JSX.Element {
   const [fromId, setFromId] = useState('')
   const [toId, setToId] = useState('')
   const [path, setPath] = useState<RelationshipPath | null>(null)
+  // The BFS result untouched, so the shortest path can be restored after a
+  // blood-connection chain was shown.
+  const [basePath, setBasePath] = useState<RelationshipPath | null>(null)
+  const [blood, setBlood] = useState<BloodResult | null>(null)
+  /** Which blood connection the canvas shows; null = the shortest path. */
+  const [shownConn, setShownConn] = useState<number | null>(null)
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [fitTick, setFitTick] = useState(0)
@@ -205,6 +213,10 @@ export function RelationshipView(): JSX.Element {
       setSearched(true)
       window.api.relationship.find(f, kinshipTo).then((p) => {
         setPath(p)
+        setBasePath(p)
+        setShownConn(null)
+        const ids = new Set(Array.from(useAppStore.getState().peopleById.keys()))
+        setBlood(computeBloodConnections(f, kinshipTo, useAppStore.getState().families, ids))
         setLoading(false)
         setFitTick((n) => n + 1)
       })
@@ -212,11 +224,105 @@ export function RelationshipView(): JSX.Element {
     useAppStore.setState({ kinshipFrom: undefined, kinshipTo: undefined })
   }, [kinshipFrom, kinshipTo, defaultRootId])
 
+  /** A↑…↑ancestor↓…↓B as a RelationshipPath, so the EXISTING canvas (elbows,
+   *  cards, kinship terms) renders a blood connection with zero new drawing
+   *  code — the route climbs to the common ancestor and descends to B. */
+  const connToPath = (conn: BloodConnection): RelationshipPath => {
+    const node = (id: string): RelationshipPath['nodes'][number] => {
+      const p = peopleById.get(id)
+      const b = p ? yr(p.birthDate) : ''
+      const d = p ? yr(p.deathDate) : ''
+      return {
+        id,
+        name: p ? fullName(p) : '—',
+        sex: p?.sex ?? 'U',
+        lifespan: b || d ? `${b || '?'}–${d || ''}` : ''
+      }
+    }
+    const up = conn.pathA
+    const down = [...conn.pathB].reverse().slice(1) // ancestor already in `up`
+    return {
+      nodes: [...up.map(node), ...down.map(node)],
+      relations: [
+        ...Array<'parent'>(up.length - 1).fill('parent'),
+        ...Array<'child'>(down.length).fill('child')
+      ]
+    }
+  }
+
+  const showConn = (i: number | null): void => {
+    setShownConn(i)
+    if (i === null) setPath(basePath)
+    else if (blood) setPath(connToPath(blood.connections[i]))
+    setFitTick((n) => n + 1)
+  }
+
+  /** Printable report: the shortest path, every blood connection, and the
+   *  currently shown chain — text-first, which is what lands well on paper. */
+  const exportPdf = async (): Promise<void> => {
+    if (!basePath) return
+    const esc = (x: string): string =>
+      x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const life = (id: string): string => {
+      const p = peopleById.get(id)
+      if (!p) return ''
+      const b = yr(p.birthDate)
+      const d = yr(p.deathDate)
+      return b || d ? ` (${b || '?'}–${d || ''})` : ''
+    }
+    const person = (id: string): string => esc(nameOf(id)) + esc(life(id))
+    const chainHtml = (pth: RelationshipPath): string =>
+      '<ol class="chain">' +
+      pth.nodes
+        .map((n, i) => {
+          const rt = i === 0 ? null : relationTerm(pth.relations.slice(0, i), n.sex)
+          const term = rt ? ` <span class="rel">${esc(t(rt.key, rt.params) as string)}</span>` : ''
+          const marr = i > 0 && pth.relations[i - 1] === 'spouse' ? ' <span class="marr">⚭</span>' : ''
+          return `<li>${person(n.id)}${term}${marr}</li>`
+        })
+        .join('') +
+      '</ol>'
+    const bloodHtml = (blood?.connections ?? [])
+      .map((c) => {
+        const who = c.ids.map((id) => person(id)).join(' &amp; ')
+        const up = c.pathA.map(person).join(' → ')
+        const down = c.pathB.map(person).join(' → ')
+        return `<div class="conn"><h3>${who} <span class="gens">${c.genA}↑ · ${c.genB}↑</span></h3>
+          <p class="side"><b>${person(c.pathA[0])}:</b> ${up}</p>
+          <p class="side"><b>${person(c.pathB[0])}:</b> ${down}</p></div>`
+      })
+      .join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      @page { size: A4; margin: 16mm 14mm; }
+      body { font-family: 'Segoe UI', system-ui, sans-serif; color: #1c2b27; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 2px; } h2 { font-size: 14px; margin: 18px 0 6px; }
+      h3 { font-size: 12px; margin: 10px 0 3px; } .sub { color: #667; margin: 0 0 12px; }
+      .chain { margin: 4px 0; padding-left: 18px; } .chain li { margin: 2px 0; }
+      .rel { color: #0d7a6e; } .marr { color: #be123c; } .gens { color: #667; font-weight: normal; }
+      .side { margin: 2px 0 2px 10px; color: #334; } .conn { page-break-inside: avoid; }
+    </style></head><body>
+      <h1>${person(fromId)} ⟷ ${person(toId)}</h1>
+      <p class="sub">${esc(t('kinship.title'))} · TreeMonk</p>
+      <h2>${esc(t('kinship.bloodShortest'))}</h2>
+      ${chainHtml(basePath)}
+      ${bloodHtml ? `<h2>${esc(t('kinship.bloodTitle', { count: blood?.connections.length ?? 0 }))}</h2>${bloodHtml}` : ''}
+    </body></html>`
+    const res = await window.api.dashboard.exportPdf(html, `kinship-${nameOf(fromId)}-${nameOf(toId)}`)
+    if (res) toast.success(t('kinship.pdfDone', { path: res.path }))
+  }
+
   const find = async (): Promise<void> => {
     if (!fromId || !toId || !window.api.relationship) return
     setLoading(true)
     setSearched(true)
-    setPath(await window.api.relationship.find(fromId, toId))
+    const p = await window.api.relationship.find(fromId, toId)
+    setPath(p)
+    setBasePath(p)
+    setShownConn(null)
+    // Every nearest common ancestor besides the shortest path — pure local
+    // graph work over the store, no IPC.
+    const ids = new Set(Array.from(peopleById.keys()))
+    setBlood(computeBloodConnections(fromId, toId, families, ids))
     setLoading(false)
     setFitTick((n) => n + 1)
   }
@@ -270,6 +376,17 @@ export function RelationshipView(): JSX.Element {
               {t('kinship.steps', { count: path.relations.length })}
             </span>
           )}
+          {path && (
+            <Button
+              size="sm"
+              variant="outline"
+              className={cn('h-7 gap-1.5 px-2.5', !(path.relations.length > 0) && 'ml-auto')}
+              onClick={() => void exportPdf()}
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              PDF
+            </Button>
+          )}
         </div>
 
         {/* Aligned From → To → Find row */}
@@ -290,6 +407,50 @@ export function RelationshipView(): JSX.Element {
             {t('kinship.find')}
           </Button>
         </div>
+
+        {/* Every BLOOD connection besides the shortest path. The reported case:
+            husband and wife both descending from the same 17th-century ancestor
+            — the BFS shows only the marriage, these chips show the rest. */}
+        {searched && !loading && blood && blood.connections.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <Network className="h-3.5 w-3.5" />
+              {t('kinship.bloodTitle', { count: blood.connections.length })}
+            </span>
+            <button
+              onClick={() => showConn(null)}
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                shownConn === null
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground'
+              )}
+            >
+              {t('kinship.bloodShortest')}
+            </button>
+            {blood.connections.map((c, i) => (
+              <button
+                key={i}
+                onClick={() => showConn(i)}
+                title={t('kinship.bloodChipHint')}
+                className={cn(
+                  'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                  shownConn === i
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                )}
+              >
+                {c.ids.map((id) => nameOf(id)).join(' & ')}
+                <span className="ml-1 tabular-nums opacity-70">
+                  {c.genA}↑·{c.genB}↑
+                </span>
+              </button>
+            ))}
+            {blood.truncated && (
+              <span className="text-[11px] text-muted-foreground">{t('kinship.bloodTruncated')}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Canvas */}

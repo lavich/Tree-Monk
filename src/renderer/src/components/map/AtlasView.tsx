@@ -10,6 +10,7 @@ import {
   Church,
   Compass,
   Flame,
+  Footprints,
   Heart,
   Home,
   Landmark,
@@ -18,6 +19,8 @@ import {
   MapPin,
   Minus,
   Mountain,
+  Pause,
+  Play,
   Plus,
   Route,
   Search,
@@ -25,6 +28,7 @@ import {
   SlidersHorizontal,
   ChevronUp,
   Sparkles,
+  Users,
   X
 } from 'lucide-react'
 import { cn, fullName, yearOf } from '@/lib/utils'
@@ -32,8 +36,16 @@ import { useAppStore } from '@/store/useAppStore'
 import { useTheme } from '@/store/useTheme'
 import { useAtlasSettings } from '@/store/useAtlasSettings'
 import { PersonAvatar } from '@/components/common/PersonAvatar'
-import type { AtlasKind, AtlasPoint } from '@shared/types'
+import type { AtlasKind, AtlasPoint, Family } from '@shared/types'
 import { PlacesManagerDialog } from './PlacesManagerDialog'
+import {
+  BRANCH_COLOR,
+  assignBranches,
+  arcLine,
+  buildMigration,
+  type BranchKey,
+  type MigrationData
+} from '@/lib/migration'
 
 /**
  * Atlas — the map view, rebuilt from scratch.
@@ -182,6 +194,26 @@ export function AtlasView(): JSX.Element {
   const dashRaf = useRef<number | undefined>(undefined)
   const fittedOnce = useRef(false)
 
+  // ---- Migration animation (ancestor branches moving over the years) ----
+  const [migOn, setMigOn] = useState(false)
+  const [migRootId, setMigRootIdRaw] = useState<string | null>(() => localStorage.getItem('tm_mig_root'))
+  const setMigRootId = useCallback((id: string | null): void => {
+    setMigRootIdRaw(id)
+    if (id) localStorage.setItem('tm_mig_root', id)
+    else localStorage.removeItem('tm_mig_root')
+  }, [])
+  const [migQ, setMigQ] = useState('')
+  const [migFamilies, setMigFamilies] = useState<Family[] | null>(null)
+  const [migPlaying, setMigPlaying] = useState(false)
+  const [migSpeed, setMigSpeed] = useState(4)
+  const [migYearUI, setMigYearUI] = useState<number | null>(null)
+  const [migMeetOpen, setMigMeetOpen] = useState(false)
+  const migYearRef = useRef(0)
+  const migRaf = useRef<number | undefined>(undefined)
+  const migOhmYear = useRef(-9999)
+  const migOnRef = useRef(false)
+  migOnRef.current = migOn
+
   // ---- Data ----
   const loadPoints = useCallback(() => {
     void window.api.atlas
@@ -236,13 +268,16 @@ export function AtlasView(): JSX.Element {
   // period basemap (anchored to their birth year), not their life events.
   const filtered = useMemo(
     () =>
-      points.filter((p) => {
-        if (focusId && p.personId !== focusId) return false
-        if (!settings.kinds[p.kind]) return false
-        if (!focusId && p.year && (p.year < yFrom || p.year > yTo)) return false
-        return true
-      }),
-    [points, settings.kinds, yFrom, yTo, focusId]
+      // Migration mode replaces the base layers with its own animated ones.
+      migOn
+        ? []
+        : points.filter((p) => {
+            if (focusId && p.personId !== focusId) return false
+            if (!settings.kinds[p.kind]) return false
+            if (!focusId && p.year && (p.year < yFrom || p.year > yTo)) return false
+            return true
+          }),
+    [points, settings.kinds, yFrom, yTo, focusId, migOn]
   )
 
   const journey = useMemo(() => {
@@ -251,6 +286,167 @@ export function AtlasView(): JSX.Element {
   }, [points, focusId])
 
   const focusPerson = focusId ? people.find((p) => p.id === focusId) : undefined
+
+  // ---- Migration data ----
+  // Families load lazily the first time the mode opens (branch assignment
+  // needs the parent links).
+  useEffect(() => {
+    if (!migOn || migFamilies) return
+    void window.api.families
+      .list()
+      .then(setMigFamilies)
+      .catch(() => setMigFamilies([]))
+  }, [migOn, migFamilies])
+
+  const migData = useMemo<MigrationData | null>(() => {
+    if (!migOn || !migRootId || !migFamilies) return null
+    const valid = new Set(people.map((p) => p.id))
+    if (!valid.has(migRootId)) return null
+    return buildMigration(points, assignBranches(migRootId, valid, migFamilies))
+  }, [migOn, migRootId, migFamilies, people, points])
+
+  // Curved arc geometry per move, computed once — the per-frame work is just
+  // filtering by year and stamping the age property.
+  const migArcs = useMemo(
+    () =>
+      (migData?.moves ?? []).map((m) => ({
+        move: m,
+        coords: arcLine(m.fromLon, m.fromLat, m.toLon, m.toLat)
+      })),
+    [migData]
+  )
+  const migDataRef = useRef<MigrationData | null>(null)
+  migDataRef.current = migData
+  const migArcsRef = useRef(migArcs)
+  migArcsRef.current = migArcs
+
+  /** GeoJSON for one animation frame: everything that happened up to `year`. */
+  const buildMigFrame = useCallback(
+    (
+      year: number
+    ): { lines: GeoJSON.FeatureCollection; dots: GeoJSON.FeatureCollection; meets: GeoJSON.FeatureCollection } => {
+      const d = migDataRef.current
+      if (!d) return { lines: EMPTY_FC, dots: EMPTY_FC, meets: EMPTY_FC }
+      const lines: GeoJSON.Feature[] = []
+      for (const a of migArcsRef.current) {
+        if (a.move.year > year) continue
+        lines.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: a.coords },
+          properties: {
+            color: BRANCH_COLOR[a.move.branch],
+            age: Math.min(year - a.move.year, 60),
+            personName: a.move.personName
+          }
+        })
+      }
+      // One dot per person at their latest known location (stays fade a few
+      // years after they end, so short records don't blink out instantly).
+      const latest = new Map<string, { lat: number; lon: number; branch: BranchKey; name: string; to: number }>()
+      for (const s of d.stays) {
+        if (s.from > year) continue
+        const cur = latest.get(s.personId)
+        if (!cur || s.from >= cur.to - 0.01 || (s.from <= year && s.to >= year))
+          latest.set(s.personId, { lat: s.lat, lon: s.lon, branch: s.branch, name: s.personName, to: s.to })
+      }
+      const dots: GeoJSON.Feature[] = []
+      for (const l of latest.values()) {
+        if (year > l.to + 8) continue
+        dots.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [l.lon, l.lat] },
+          properties: { color: BRANCH_COLOR[l.branch], personName: l.name }
+        })
+      }
+      const meets: GeoJSON.Feature[] = []
+      for (const m of d.meetings) {
+        if (m.from > year) continue
+        meets.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [m.lon, m.lat] },
+          properties: { place: m.place, from: m.from, to: m.to, count: m.people.length }
+        })
+      }
+      return {
+        lines: { type: 'FeatureCollection', features: lines },
+        dots: { type: 'FeatureCollection', features: dots },
+        meets: { type: 'FeatureCollection', features: meets }
+      }
+    },
+    []
+  )
+  const buildMigFrameRef = useRef(buildMigFrame)
+  buildMigFrameRef.current = buildMigFrame
+
+  /** Pushes one frame into the live sources (cheap; no layer rebuild). */
+  const applyMigFrame = useCallback(
+    (year: number): void => {
+      const map = mapRef.current
+      if (!map) return
+      const frame = buildMigFrame(year)
+      ;(map.getSource('mig-lines') as maplibregl.GeoJSONSource | undefined)?.setData(frame.lines)
+      ;(map.getSource('mig-dots') as maplibregl.GeoJSONSource | undefined)?.setData(frame.dots)
+      ;(map.getSource('mig-meets') as maplibregl.GeoJSONSource | undefined)?.setData(frame.meets)
+      // The period basemap follows the animation year (throttled — restyling
+      // OHM every frame would stutter).
+      if (resolvedRef.current.key === 'historical' && Math.abs(year - migOhmYear.current) >= 2) {
+        migOhmYear.current = year
+        safeFilterByDate(map, Math.round(year))
+      }
+    },
+    [buildMigFrame]
+  )
+
+  /** Jump the animation clock (slider, meeting click, reset). */
+  const setMigYear = useCallback(
+    (year: number): void => {
+      migYearRef.current = year
+      setMigYearUI(Math.round(year))
+      applyMigFrame(year)
+    },
+    [applyMigFrame]
+  )
+
+  // New data (or a new root) rewinds to the start of its span.
+  useEffect(() => {
+    if (!migData?.span) return
+    setMigYear(migData.span.min)
+    setMigPlaying(false)
+  }, [migData, setMigYear])
+
+  // The animation clock: rAF-driven, writes the sources directly and mirrors
+  // the year into React state only a few times a second.
+  useEffect(() => {
+    if (!migPlaying || !migData?.span) return
+    let last = performance.now()
+    let tick = 0
+    const step = (): void => {
+      const now = performance.now()
+      const dt = Math.min((now - last) / 1000, 0.1)
+      last = now
+      let y = migYearRef.current + dt * migSpeed
+      if (y >= migData.span!.max) {
+        y = migData.span!.max
+        setMigPlaying(false)
+      }
+      migYearRef.current = y
+      applyMigFrame(y)
+      if (++tick % 8 === 0) setMigYearUI(Math.round(y))
+      if (migPlaying) migRaf.current = requestAnimationFrame(step)
+    }
+    migRaf.current = requestAnimationFrame(step)
+    return () => {
+      if (migRaf.current) cancelAnimationFrame(migRaf.current)
+      setMigYearUI(Math.round(migYearRef.current))
+    }
+  }, [migPlaying, migSpeed, migData, applyMigFrame])
+
+  const migMatches = useMemo(() => {
+    const q = migQ.trim().toLowerCase()
+    if (!q) return []
+    return people.filter((p) => fullName(p).toLowerCase().includes(q)).slice(0, 40)
+  }, [people, migQ])
+  const migRoot = migRootId ? people.find((p) => p.id === migRootId) : undefined
 
   // ---- GeoJSON builders ----
   const pointsFC = useMemo<GeoJSON.FeatureCollection>(
@@ -371,10 +567,14 @@ export function AtlasView(): JSX.Element {
       'atlas-journey-dash',
       'atlas-jstops',
       'atlas-jstop-nums',
+      'atlas-mig-lines',
+      'atlas-mig-meets',
+      'atlas-mig-meets-ring',
+      'atlas-mig-dots',
       'atlas-buildings'
     ])
       if (map.getLayer(id)) map.removeLayer(id)
-    for (const id of ['points', 'heat', 'lines', 'journey', 'jstops'])
+    for (const id of ['points', 'heat', 'lines', 'journey', 'jstops', 'mig-lines', 'mig-dots', 'mig-meets'])
       if (map.getSource(id)) map.removeSource(id)
 
     // Terrain sources (hosted styles don't carry them).
@@ -567,6 +767,61 @@ export function AtlasView(): JSX.Element {
       paint: { 'text-color': '#ffffff' }
     })
 
+    // Migration animation layers — sources are born WITH the current frame,
+    // and the rAF clock only setData()s into them afterwards.
+    if (migOnRef.current) {
+      const frame = buildMigFrameRef.current(migYearRef.current)
+      map.addSource('mig-lines', { type: 'geojson', data: frame.lines })
+      map.addSource('mig-dots', { type: 'geojson', data: frame.dots })
+      map.addSource('mig-meets', { type: 'geojson', data: frame.meets })
+      map.addLayer({
+        id: 'atlas-mig-lines',
+        type: 'line',
+        source: 'mig-lines',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['get', 'color'],
+          // Fresh moves draw bold, then settle into a faint permanent trace.
+          'line-width': ['interpolate', ['linear'], ['get', 'age'], 0, 3.4, 10, 2.2, 40, 1.1],
+          'line-opacity': ['interpolate', ['linear'], ['get', 'age'], 0, 0.95, 10, 0.6, 40, 0.22]
+        }
+      })
+      map.addLayer({
+        id: 'atlas-mig-meets-ring',
+        type: 'circle',
+        source: 'mig-meets',
+        paint: {
+          'circle-color': 'rgba(168,85,247,0.18)',
+          'circle-radius': 15,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': 'rgba(168,85,247,0.85)'
+        }
+      })
+      map.addLayer({
+        id: 'atlas-mig-meets',
+        type: 'symbol',
+        source: 'mig-meets',
+        layout: {
+          'text-field': ['to-string', ['get', 'count']],
+          'text-font': [font],
+          'text-size': 11,
+          'text-allow-overlap': true
+        },
+        paint: { 'text-color': theme === 'dark' ? '#e9d5ff' : '#7e22ce' }
+      })
+      map.addLayer({
+        id: 'atlas-mig-dots',
+        type: 'circle',
+        source: 'mig-dots',
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 4.5, 10, 6.5],
+          'circle-stroke-width': 1.4,
+          'circle-stroke-color': 'rgba(255,255,255,0.9)'
+        }
+      })
+    }
+
     // Terrain + sky belong to the freshly-built style too (the mode effect only
     // animates the pitch — applying here keeps the order race-free).
     try {
@@ -695,7 +950,44 @@ export function AtlasView(): JSX.Element {
         .setDOMContent(box)
         .addTo(map)
     })
-    for (const layer of ['atlas-pts-hit', 'atlas-clusters']) {
+    // Meeting-point popup: who from which side was around, and when.
+    map.on('click', 'atlas-mig-meets-ring', (e) => {
+      const f = e.features?.[0]
+      if (!f) return
+      const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates
+      const meet = migDataRef.current?.meetings.find(
+        (m) => Math.abs(m.lat - lat) < 0.001 && Math.abs(m.lon - lon) < 0.001
+      )
+      const box = document.createElement('div')
+      box.className = 'space-y-1'
+      const title = document.createElement('p')
+      title.className = 'text-xs font-semibold'
+      title.textContent = `${String(f.properties?.place ?? '')} · ${f.properties?.from}–${f.properties?.to}`
+      box.appendChild(title)
+      for (const person of meet?.people.slice(0, 10) ?? []) {
+        const row = document.createElement('div')
+        row.className = 'flex items-center gap-1.5 px-1 py-0.5 text-[11px]'
+        const dot = document.createElement('span')
+        dot.style.cssText = `width:8px;height:8px;border-radius:99px;flex:none;background:${BRANCH_COLOR[person.branch]}`
+        const label = document.createElement('span')
+        label.className = 'truncate'
+        label.textContent = `${person.personName} · ${person.from}–${person.to}`
+        row.append(dot, label)
+        box.appendChild(row)
+      }
+      if ((meet?.people.length ?? 0) > 10) {
+        const more = document.createElement('p')
+        more.className = 'px-1 text-[10px] opacity-60'
+        more.textContent = `+${meet!.people.length - 10}`
+        box.appendChild(more)
+      }
+      new maplibregl.Popup({ closeButton: false, maxWidth: '280px', className: 'tm-map-popup' })
+        .setLngLat(e.lngLat)
+        .setDOMContent(box)
+        .addTo(map)
+    })
+
+    for (const layer of ['atlas-pts-hit', 'atlas-clusters', 'atlas-mig-meets-ring']) {
       map.on('mouseenter', layer, () => (map.getCanvas().style.cursor = 'pointer'))
       map.on('mouseleave', layer, () => (map.getCanvas().style.cursor = ''))
     }
@@ -737,6 +1029,12 @@ export function AtlasView(): JSX.Element {
   useEffect(() => {
     invalidate()
   }, [pointsFC, linesFC, journeyFC, settings.showMarkers, settings.showHeat, settings.cluster, settings.mode, theme, invalidate])
+
+  // Migration data landing (async families fetch / root change) needs its own
+  // rebuild — the base FCs don't change then.
+  useEffect(() => {
+    invalidate()
+  }, [migData, migOn, invalidate])
 
   // The period map's year filter follows the TO end of the time window.
   useEffect(() => {
@@ -1136,6 +1434,27 @@ export function AtlasView(): JSX.Element {
             )}
           </section>
 
+          {/* ---- Migration animation (ancestor branches over the years) ---- */}
+          <section className="border-t border-border/40 pt-2">
+            <button
+              onClick={() => {
+                const next = !migOn
+                setMigOn(next)
+                setMigPlaying(false)
+                setMigMeetOpen(false)
+                if (next) setFocusId(null)
+              }}
+              className={cn(
+                'flex w-full items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors',
+                migOn
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border/40 text-muted-foreground hover:text-primary'
+              )}
+            >
+              <Footprints className="h-3.5 w-3.5" /> {t('atlas.mig.title')}
+            </button>
+          </section>
+
           {/* ---- Place manager (hierarchy + GOV) ---- */}
           <section className="border-t border-border/40 pt-2">
             <button
@@ -1214,6 +1533,167 @@ export function AtlasView(): JSX.Element {
                 )
               })}
             </ol>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Migration HUD (bottom center) ---- */}
+      {migOn && (
+        <div className="glass-strong absolute bottom-6 left-1/2 z-10 w-[min(620px,calc(100%-7rem))] -translate-x-1/2 rounded-2xl p-3 text-foreground">
+          {!migRoot ? (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold">{t('atlas.mig.pickRoot')}</p>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={migQ}
+                  onChange={(e) => setMigQ(e.target.value)}
+                  placeholder={t('atlas.searchPerson')}
+                  autoFocus
+                  className="h-8 w-full rounded-xl border border-border/40 bg-background/50 pl-8 pr-2 text-xs outline-none transition-colors focus:border-primary/60"
+                />
+                {migMatches.length > 0 && (
+                  <div className="glass-strong absolute bottom-full z-20 mb-1 max-h-56 w-full overflow-y-auto rounded-xl p-1">
+                    {migMatches.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setMigRootId(p.id)
+                          setMigQ('')
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-xs hover:bg-accent/60"
+                      >
+                        <PersonAvatar personId={p.id} name={fullName(p)} sex={p.sex} className="h-6 w-6 shrink-0 text-[8px]" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{fullName(p)}</span>
+                          <span className="block text-[10px] tabular-nums text-muted-foreground">{lifespan(p)}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <PersonAvatar personId={migRoot.id} name={fullName(migRoot)} sex={migRoot.sex} className="h-7 w-7 text-[9px]" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold">{fullName(migRoot)}</span>
+                  <span className="block text-[10px] text-muted-foreground">{t('atlas.mig.subtitle')}</span>
+                </span>
+                <span className="text-2xl font-bold tabular-nums text-primary">{migYearUI ?? '—'}</span>
+                <button
+                  onClick={() => setMigRootId(null)}
+                  title={t('atlas.mig.changeRoot')}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                >
+                  <Users className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    setMigOn(false)
+                    setMigPlaying(false)
+                    setMigMeetOpen(false)
+                  }}
+                  title={t('common.close')}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {migData?.span ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        if (!migPlaying && migYearRef.current >= migData.span!.max) setMigYear(migData.span!.min)
+                        setMigPlaying(!migPlaying)
+                      }}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      {migPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
+                    </button>
+                    <input
+                      type="range"
+                      min={migData.span.min}
+                      max={migData.span.max}
+                      value={migYearUI ?? migData.span.min}
+                      onChange={(e) => setMigYear(Number(e.target.value))}
+                      className="tm-range h-5 flex-1 appearance-none bg-transparent"
+                    />
+                    <button
+                      onClick={() => setMigSpeed(migSpeed >= 16 ? 2 : migSpeed * 2)}
+                      className="shrink-0 rounded-lg bg-secondary/50 px-2 py-1 text-[10px] font-semibold tabular-nums text-muted-foreground transition-colors hover:text-foreground"
+                      title={t('atlas.mig.speed')}
+                    >
+                      {migSpeed} {t('atlas.mig.yps')}
+                    </button>
+                    <button
+                      onClick={() => setMigMeetOpen(!migMeetOpen)}
+                      className={cn(
+                        'flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold transition-colors',
+                        migMeetOpen
+                          ? 'bg-[#a855f7]/15 text-[#a855f7] ring-1 ring-[#a855f7]/30'
+                          : 'bg-secondary/50 text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <Users className="h-3 w-3" /> {migData.meetings.length}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+                    {(['root', 'father', 'mother', 'ff', 'fm', 'mf', 'mm'] as const).map((b) => (
+                      <span key={b} className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                        <span className="h-2 w-2 rounded-full" style={{ background: BRANCH_COLOR[b] }} />
+                        {t(`atlas.mig.branch.${b}`)}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">{migData ? t('atlas.mig.empty') : '…'}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---- Meeting list (left) ---- */}
+      {migOn && migMeetOpen && migData && (
+        <div className="glass-strong absolute left-3 top-3 z-10 flex max-h-[calc(100%-9rem)] w-80 flex-col overflow-hidden rounded-2xl text-foreground">
+          <div className="flex items-center justify-between border-b border-border/40 py-2 pl-3.5 pr-2">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              <Users className="h-3.5 w-3.5 text-[#a855f7]" /> {t('atlas.mig.meetings')}
+            </span>
+            <button
+              onClick={() => setMigMeetOpen(false)}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            {migData.meetings.length === 0 && (
+              <p className="px-2 py-4 text-center text-xs text-muted-foreground">{t('atlas.mig.noMeetings')}</p>
+            )}
+            {migData.meetings.map((m, i) => (
+              <button
+                key={i}
+                onClick={() => {
+                  setMigYear(Math.min(m.to, Math.max(m.from, migYearRef.current)))
+                  mapRef.current?.flyTo({ center: [m.lon, m.lat], zoom: 9, duration: 900 })
+                }}
+                className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-accent/50"
+              >
+                <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#a855f7]" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium">{m.place}</span>
+                  <span className="block text-[10px] tabular-nums text-muted-foreground">
+                    {m.from}–{m.to} · {t('atlas.mig.people', { count: m.people.length })}
+                  </span>
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       )}

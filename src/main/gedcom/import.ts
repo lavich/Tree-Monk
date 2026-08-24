@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, readFileSync } from 'fs'
-import { basename, extname, join } from 'path'
+import { basename, dirname, extname, join } from 'path'
 import { isFamilySearchId } from '@shared/familysearch'
 import { mediaDocId } from '../mediaId'
 import { getDb, mediaDir } from '../db/connection'
@@ -40,7 +40,9 @@ function parseOccupationPeriod(raw: string | null): { startDate: string | null; 
   return { startDate: s, endDate: null }
 }
 
-const EVENT_TAGS = ['BIRT', 'DEAT', 'CHR', 'BURI', 'MARR', 'RESI', 'OCCU', 'EVEN', 'CENS', 'DIV', 'BAPM', 'NATU', 'IMMI']
+// Every tag citations attach under. ENGA was missing while DIV was present —
+// an engagement's citation silently vanished (reported); CONF/EMIG likewise.
+const EVENT_TAGS = ['BIRT', 'DEAT', 'CHR', 'BURI', 'MARR', 'RESI', 'OCCU', 'EVEN', 'CENS', 'DIV', 'ENGA', 'MARB', 'CONF', 'EMIG', 'BAPM', 'NATU', 'IMMI']
 
 /** First generic `EVEN` whose `TYPE` matches `re` (e.g. baptism), with its date/place. */
 function eventByType(node: GedNode, re: RegExp): { date: string | null; place: string | null } | null {
@@ -90,20 +92,29 @@ function eventNote(indi: GedNode, tag: string): string | null {
 
 
 /** Collects the media references of a record's `OBJE > FILE` children — both
- *  http(s) URLs and LOCAL absolute paths (MyHeritage/Ahnenblatt GEDCOMs point
+ *  http(s) URLs and LOCAL absolute paths (MyHeritage & co. GEDCOMs point
  *  at a folder on disk; `file://` URLs are normalized to plain paths).
  *  `primary` marks the GEDCOM "preferred"/portrait image (`_PRIM Y`,
  *  the Ancestry/FamilySearch extension), so it can become the profile photo. */
 function mediaUrls(
-  node: GedNode
+  node: GedNode,
+  objeByXref?: Map<string, GedNode>,
+  baseDir?: string | null
 ): { url: string; title: string | null; primary: boolean; remote: boolean }[] {
   const out: { url: string; title: string | null; primary: boolean; remote: boolean }[] = []
-  for (const obje of node.children) {
+  for (let obje of node.children) {
     if (obje.tag !== 'OBJE') continue
+    // `1 OBJE @O01@` points at a top-level multimedia RECORD — resolve it and
+    // read the same FILE/TITL structure from there (it used to be dropped).
+    if (/^@.+@$/.test(obje.value)) {
+      const rec = objeByXref?.get(obje.value)
+      if (!rec) continue
+      obje = rec
+    }
     const primary = /^y/i.test(childValue(obje, '_PRIM') ?? childValue(obje, '_PRIMARY') ?? '')
     const title = childValue(obje, 'TITL')
     const files = obje.children.filter((c) => c.tag === 'FILE')
-    const raws = files.length ? files.map((f) => f.value) : obje.value ? [obje.value] : []
+    const raws = files.length ? files.map((f) => f.value) : obje.value && !/^@.+@$/.test(obje.value) ? [obje.value] : []
     for (const raw of raws) {
       const url = raw.trim()
       if (!url) continue
@@ -114,7 +125,17 @@ function mediaUrls(
       // file:///C:/x.jpg → C:/x.jpg; file://server/share stays a UNC-ish path.
       const p = url.replace(/^file:\/\/\/?/i, '')
       // Absolute Windows (C:\ or C:/), UNC (\\server) or POSIX (/home/…) path.
-      if (/^([A-Za-z]:[\\/]|\\\\|\/)/.test(p)) out.push({ url: p, title, primary, remote: false })
+      if (/^([A-Za-z]:[\\/]|\\\\|\/)/.test(p)) {
+        out.push({ url: p, title, primary, remote: false })
+        continue
+      }
+      // RELATIVE path ("media/kep.jpg") — the convention our own export and
+      // most desktop programs use. Only resolvable when the .ged's folder is
+      // known (file import, not pasted text), and only when the file exists.
+      if (baseDir) {
+        const abs = join(baseDir, p)
+        if (existsSync(abs)) out.push({ url: abs, title, primary, remote: false })
+      }
     }
   }
   return out
@@ -134,11 +155,12 @@ const LOCAL_MEDIA_MIME: Record<string, string> = {
 
 /** Imports a GEDCOM file into the database. Returns counts. */
 export function importGedcomFile(filePath: string): GedcomImportResult {
-  return importGedcomText(readFileSync(filePath, 'utf-8'))
+  // The file's own folder resolves relative media paths ("media/kep.jpg").
+  return importGedcomText(readFileSync(filePath, 'utf-8'), dirname(filePath))
 }
 
 /** Imports GEDCOM content, extracting people, families, sources, notes & citations. */
-export function importGedcomText(text: string): GedcomImportResult {
+export function importGedcomText(text: string, mediaBaseDir: string | null = null): GedcomImportResult {
   const roots = parseGedcom(text)
   const result = {
     people: 0,
@@ -155,8 +177,14 @@ export function importGedcomText(text: string): GedcomImportResult {
   }
 
   const run = getDb().transaction(() => {
-    // --- Places from MAP/LATI/LONG ---
-    for (const p of collectPlaces(roots)) Places.upsert(p.name, p.lat, p.lon)
+    // --- Places: inline MAP coordinates + shared _LOC records (GEDCOM-L) ---
+    // A GEDCOM-L place registry arrives as `0 @L1@ _LOC` records; their
+    // coordinates and GOV ids land in the gazetteer, and a spelling that
+    // references a _LOC gets its canonical mapping for free.
+    for (const p of collectPlaces(roots)) {
+      if (p.lat !== null && p.lon !== null) Places.upsert(p.name, p.lat, p.lon)
+      if (p.govId || p.canonical) Places.adoptGedcomMeta(p.name, p)
+    }
 
     // --- Repositories (REPO) ---
     for (const r of roots.filter((n) => n.tag === 'REPO' && n.xref)) {
@@ -188,13 +216,22 @@ export function importGedcomText(text: string): GedcomImportResult {
       // A source's own date (1 DATA / 2 DATE, or a direct 1 DATE) → chronological sort.
       const dataNode = s.children.find((c) => c.tag === 'DATA')
       const recordDate = (dataNode ? childValue(dataNode, 'DATE') : null) ?? childValue(s, 'DATE') ?? null
+      // A NOTE on the source (inline or a @N@ pointer) has no column of its
+      // own — it is appended to the source TEXT rather than dropped.
+      const srcNotes: string[] = []
+      for (const c of s.children) {
+        if (c.tag !== 'NOTE') continue
+        const txt = /^@.+@$/.test(c.value) ? noteTextByXref.get(c.value) ?? '' : c.value
+        if (txt.trim()) srcNotes.push(txt.trim())
+      }
+      const srcText = [childValue(s, 'TEXT'), ...srcNotes].filter(Boolean).join('\n\n') || null
       const src = Sources.upsert({
         gedcomId: s.xref,
         title: childValue(s, 'TITL') ?? '',
         author: childValue(s, 'AUTH'),
         publication: childValue(s, 'PUBL'),
         repositoryId: repo?.id ?? null,
-        text: childValue(s, 'TEXT'),
+        text: srcText,
         recordDate
       })
       sourceByXref.set(s.xref!, src.id)
@@ -244,6 +281,10 @@ export function importGedcomText(text: string): GedcomImportResult {
       if (seen.has(key)) return // identical citation already present — skip
       seen.add(key)
       const data = child(sourNode, 'DATA')
+      // Ancestry stores the citation's web link as DATA.WWW — losing it strips
+      // hundreds of record links from a typical Ancestry tree.
+      const www = data ? childValue(data, 'WWW') : null
+      const baseNote = data ? childValue(data, 'TEXT') : childValue(sourNode, 'NOTE')
       Citations.create({
         sourceId,
         ownerType,
@@ -251,7 +292,7 @@ export function importGedcomText(text: string): GedcomImportResult {
         eventTag,
         page,
         quality: childValue(sourNode, 'QUAY'),
-        note: data ? childValue(data, 'TEXT') : childValue(sourNode, 'NOTE')
+        note: [baseNote, www].filter(Boolean).join('\n') || null
       })
       result.citations++
     }
@@ -262,16 +303,29 @@ export function importGedcomText(text: string): GedcomImportResult {
         if (!EVENT_TAGS.includes(ev.tag)) continue
         for (const c of ev.children) if (c.tag === 'SOUR') addCitation(c, ownerType, ownerId, ev.tag)
       }
+      // A citation on a NAME records which document proves a SPELLING — GEDCOM
+      // allows it, and it used to be dropped. Kept under the 'NAME' tag, which
+      // is exactly where the export writes it back.
+      if (ownerType === 'person') {
+        for (const nm of node.children) {
+          if (nm.tag !== 'NAME') continue
+          for (const c of nm.children) if (c.tag === 'SOUR') addCitation(c, ownerType, ownerId, 'NAME')
+        }
+      }
     }
 
     // Multimedia (OBJE → FILE URL) → link-documents attached to the given people.
     // Deduped by URL across the targets so a re-import never piles up copies.
+    // Top-level multimedia records, for `1 OBJE @O01@` pointer references.
+    const objeByXref = new Map<string, GedNode>()
+    for (const o of roots) if (o.tag === 'OBJE' && o.xref) objeByXref.set(o.xref, o)
+
     const importMedia = (node: GedNode, personIds: string[]): void => {
       const targets = personIds.filter(Boolean)
       if (!targets.length) return
       let primaryPortrait: string | null = null // `_PRIM Y` flagged image
       let firstUntitled: string | null = null // first untitled image = the portrait
-      for (const { url, title, primary, remote } of mediaUrls(node)) {
+      for (const { url, title, primary, remote } of mediaUrls(node, objeByXref, mediaBaseDir)) {
         const docId = mediaDocId(url)
         const isImg = /\.(jpe?g|png|gif|webp|bmp|tiff?)(\?|$)/i.test(url)
         // Deterministic id makes this idempotent: an existing doc (possibly
@@ -372,7 +426,21 @@ export function importGedcomText(text: string): GedcomImportResult {
         return null
       }
       for (const ev of indi.children) {
-        if (ev.tag === 'RESI') {
+        if (ev.tag === 'CONF') {
+          // Confirmation was simply not on the imported-event list, so the
+          // whole event (and with it every BEF-qualified date the probe put
+          // there) vanished. It round-trips as a typed EVEN.
+          const { startDate, endDate } = parseOccupationPeriod(childValue(ev, 'DATE'))
+          const eid = addEvent({
+            type: 'confirmation',
+            date: startDate,
+            endDate,
+            place: childValue(ev, 'PLAC'),
+            value: null,
+            note: inlineNote(ev)
+          })
+          if (eid) pendingParticipants.push({ eventId: eid, node: ev })
+        } else if (ev.tag === 'RESI') {
           const { startDate, endDate } = parseOccupationPeriod(childValue(ev, 'DATE'))
           const eid = addEvent({
             type: 'residence',
@@ -428,7 +496,7 @@ export function importGedcomText(text: string): GedcomImportResult {
       // `EVEN` with `TYPE Baptism/Christening` instead of a `CHR`/`BAPM` tag.
       const evenChristening = eventByType(indi, HANDLED_EVENT_TYPE)
       // Person-level NOTEs (inline text or @N@ pointers) land in the visible
-      // profile notes field — that is where Ahnenblatt/Heredis/PAF & co. show
+      // profile notes field — that is where Heredis/PAF & co. show
       // them, so an import must not park them in an invisible side table only.
       const noteParts: string[] = []
       for (const c of indi.children) {
@@ -519,7 +587,9 @@ export function importGedcomText(text: string): GedcomImportResult {
       const nameNodes = indi.children.filter((c) => c.tag === 'NAME')
       const variantNodes = [
         ...nameNodes.slice(1),
-        ...indi.children.filter((c) => c.tag === '_AKA' || c.tag === 'NICK')
+        ...indi.children.filter((c) => c.tag === '_AKA' || c.tag === 'NICK'),
+        // A NICK may also sit UNDER the name (2 NICK …) — 5.5.1 puts it there.
+        ...(nameNode ? nameNode.children.filter((c) => c.tag === 'NICK') : [])
       ]
       for (const node of variantNodes) {
         const { given, surname: aliasSurname } = parseName(node.value)
@@ -728,6 +798,6 @@ export function importGedcomText(text: string): GedcomImportResult {
 
   run()
   // Drop nameless married-in stubs (no name, no dates, no ancestry).
-  removeNamelessStubs()
+  removeNamelessStubs({ keepSpouses: true })
   return result
 }

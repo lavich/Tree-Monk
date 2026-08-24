@@ -588,7 +588,10 @@
     "genShort": "{{n}}. Gen.",
     "sosaHint": "Ahnentafel-Nummer (Sosa)",
     "legendFather": "Vaterlinie",
-    "legendMother": "Mutterlinie"
+    "legendMother": "Mutterlinie",
+    "pdfPaths": "Pfade",
+    "pdfDone": "PDF gespeichert: {{path}}",
+    "person": "Person"
   },
   "kinship": {
     "title": "Verwandtschaftssuche",
@@ -670,7 +673,12 @@
       "cousin": "Cousin(e)",
       "cousinComplex": "Cousin(e) (Grad {{degree}}, {{removed}}× entfernt)"
     },
-    "byMarriage": "durch Heirat"
+    "byMarriage": "durch Heirat",
+    "bloodTitle": "Blutsverbindungen ({{count}})",
+    "bloodShortest": "Kürzester Weg",
+    "bloodChipHint": "Klicken, um diese Blutlinie zu zeichnen — hinauf zum gemeinsamen Vorfahren, hinunter zur anderen Person.",
+    "bloodTruncated": "Ein Teil des Baums wurde durch die Sicherheitsgrenze gekappt — die Liste ist eventuell unvollständig.",
+    "pdfDone": "PDF gespeichert: {{path}}"
   },
   "issues": {
     "tabGivenNames": "Vornamen",
@@ -2224,6 +2232,27 @@
     "emptyTitle": "Noch nichts anzuzeigen",
     "emptyHint": "Ortsnamen brauchen Koordinaten — starte die Geokodierung.",
     "geocode": "Orte geokodieren",
+    "mig": {
+      "title": "Wanderung (Animation)",
+      "subtitle": "Wanderungsbewegungen der Vorfahrenlinien über Generationen",
+      "pickRoot": "Wähle die Ausgangsperson — ihre Vorfahren wandern über die Karte",
+      "changeRoot": "Andere Ausgangsperson",
+      "speed": "Geschwindigkeit",
+      "yps": "J./s",
+      "meetings": "Begegnungsorte",
+      "noMeetings": "Die väterliche und die mütterliche Linie waren nie zugleich am selben Ort.",
+      "people": "{{count}} Personen",
+      "empty": "Für diese Person gibt es keine datierten, kartierbaren Vorfahren-Ereignisse.",
+      "branch": {
+        "root": "Ausgang",
+        "father": "Vater",
+        "mother": "Mutter",
+        "ff": "Linie Großvater väterlicherseits",
+        "fm": "Linie Großmutter väterlicherseits",
+        "mf": "Linie Großvater mütterlicherseits",
+        "mm": "Linie Großmutter mütterlicherseits"
+      }
+    },
     "base": {
       "auto": "Auto",
       "light": "Hell",

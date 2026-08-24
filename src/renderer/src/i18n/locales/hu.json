@@ -588,7 +588,10 @@
     "genShort": "{{n}}. gen.",
     "sosaHint": "Ahnentafel (Sosa) pozíció",
     "legendFather": "Apa-vonal",
-    "legendMother": "Anya-vonal"
+    "legendMother": "Anya-vonal",
+    "pdfPaths": "Útvonalak",
+    "pdfDone": "PDF elmentve: {{path}}",
+    "person": "Személy"
   },
   "kinship": {
     "title": "Rokonságkereső",
@@ -670,7 +673,12 @@
       "cousin": "unokatestvéred",
       "cousinComplex": "unokatestvéred ({{degree}}. fok, {{removed}}× eltolva)"
     },
-    "byMarriage": "házasság révén"
+    "byMarriage": "házasság révén",
+    "bloodTitle": "Vérségi kapcsolatok ({{count}})",
+    "bloodShortest": "Legrövidebb út",
+    "bloodChipHint": "Kattints, és a vászon ezt a vérségi utat rajzolja ki — fel a közös ősig, le a másik személyig.",
+    "bloodTruncated": "A fa egy része a biztonsági korlát miatt kimaradt — a lista nem feltétlenül teljes.",
+    "pdfDone": "PDF elmentve: {{path}}"
   },
   "issues": {
     "tabGivenNames": "Keresztnevek",
@@ -2224,6 +2232,27 @@
     "emptyTitle": "Még nincs megjeleníthető hely",
     "emptyHint": "A helységnevekhez koordináták kellenek — indítsd el a geokódolást.",
     "geocode": "Helyek geokódolása",
+    "mig": {
+      "title": "Vándorlás (animáció)",
+      "subtitle": "Ősi ágak vándorlása generációkon át",
+      "pickRoot": "Válaszd ki a kiinduló személyt — az ő ősei vándorolnak a térképen",
+      "changeRoot": "Másik kiinduló személy",
+      "speed": "Sebesség",
+      "yps": "év/mp",
+      "meetings": "Találkozási pontok",
+      "noMeetings": "Az apai és anyai ág nem járt egyszerre ugyanott.",
+      "people": "{{count}} személy",
+      "empty": "Ehhez a személyhez nincs térképre tehető, dátumozott ős-esemény.",
+      "branch": {
+        "root": "Kiinduló",
+        "father": "Apa",
+        "mother": "Anya",
+        "ff": "Apai nagyapa ága",
+        "fm": "Apai nagyanya ága",
+        "mf": "Anyai nagyapa ága",
+        "mm": "Anyai nagyanya ága"
+      }
+    },
     "base": {
       "auto": "Auto",
       "light": "Világos",
