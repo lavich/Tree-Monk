@@ -22,6 +22,7 @@ import { RootPicker } from './RootPicker'
 import { PanZoom } from './PanZoom'
 import { FsPersonSyncDialog } from '@/components/person/FsPersonSyncDialog'
 import { FsScanDialog, FsScanPill } from './FsScanDialog'
+import { ensureFsSession } from '@/lib/fsSession'
 import { useFsMode } from '@/hooks/useFsMode'
 import { useFsChangeWatcher } from '@/hooks/useFsChangeWatcher'
 import { isFamilySearchId } from '@/lib/familySearchSearch'
@@ -431,7 +432,7 @@ export function FamilyTree(): JSX.Element {
           person (deletes, new data, updated facts). Minimizable to background. */}
       {fsMode && (
         <button
-          onClick={() => void startFsScan()}
+          onClick={() => void ensureFsSession().then((ok) => ok && void startFsScan())}
           disabled={fsScanRunning}
           title={t('fsScan.title')}
           className="glass-subtle flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 disabled:opacity-50 dark:text-emerald-400"

@@ -787,7 +787,22 @@
       "moveParentSlot": "In die richtige Rolle verschieben",
       "swapDone": "Eltern getauscht.",
       "moveDone": "In die richtige Rolle verschoben."
-    }
+    },
+    "tabHidden": "Ausgeblendet",
+    "hiddenEmpty": "Nichts ausgeblendet. Was du mit „Fehlalarm“ oder dem Ausblenden-Knopf entfernst, landet hier und lässt sich wiederherstellen.",
+    "hiddenAnomalies": "Ausgeblendete Datenfehler",
+    "hiddenNameGroups": "Ausgeblendete Namensvarianten-Vorschläge",
+    "hiddenMerges": "Keine Duplikate",
+    "restore": "Wiederherstellen",
+    "restored": "Wiederhergestellt — erscheint beim nächsten Scan wieder.",
+    "groupHidden": "Vorschlag ausgeblendet — im Reiter „Ausgeblendet“ wiederherstellbar.",
+    "hideGroup": "So ist es richtig — Vorschlag ausblenden",
+    "affected": "{{count}} betroffen",
+    "affectedTitle": "Wer würde umbenannt? Klicken für die Liste.",
+    "customRenameTitle": "Stapel-Umbenennung",
+    "customRenameFrom": "Von…",
+    "customRenameTo": "Zu…",
+    "customRenameCount": "{{count}} Treffer"
   },
   "query": {
     "title": "Abfrage-Generator",
@@ -1382,7 +1397,8 @@
       "priest": "Pfarrer",
       "witness": "Zeuge",
       "undertaker": "Bestatter"
-    }
+    },
+    "copyChristeningToBirth": "Taufdatum und -ort als Geburt übernehmen"
   },
   "research": {
     "history": "Rechercheverlauf",
@@ -1683,7 +1699,10 @@
     "confirmPhase1": "Zuerst laden die Baumstruktur und die Grunddaten — Quellen, Notizen und Fotos kommen erst ganz am Ende, und das ist der längere Teil.",
     "confirmPhase2": "Auch die Vereinheitlichung der Ortsnamen läuft nach dem Import — bis dahin kann derselbe Ort in der Statistik vorübergehend mehrfach erscheinen.",
     "confirmPhase3": "Der Import läuft im Hintergrund: Du kannst die App weiter benutzen, schließe sie nur nicht. Jederzeit stoppbar — alles bisher Geladene bleibt erhalten.",
-    "confirmStart": "Starten"
+    "confirmStart": "Starten",
+    "sessionBadgeExpired": "FS: Anmeldung nötig",
+    "sessionModalTitle": "Deine FamilySearch-Sitzung ist abgelaufen",
+    "sessionModalBody": "Aus Sicherheitsgründen läuft die FamilySearch-Anmeldung alle 24 Stunden ab. Melde dich erneut an, damit Synchronisierung und Import funktionieren — deine Daten bleiben derweil verfügbar, nichts geht verloren."
   },
   "demo": {
     "introTitle": "Willkommen in der TreeMonk-Demo!",
@@ -1779,7 +1798,7 @@
           },
           {
             "h": "Darstellung und Sprache",
-            "p": "In der oberen Leiste schaltet das Sonne/Mond-Symbol zwischen hellem und dunklem Modus um, daneben stellst du die Sprache der Oberfläche ein (Ungarisch, Englisch oder Deutsch)."
+            "p": "In der oberen Leiste schaltet das Sonne/Mond-Symbol zwischen hellem und dunklem Modus um, daneben stellst du die Sprache der Oberfläche ein (Ungarisch, Englisch, Deutsch, Französisch, Italienisch, Spanisch, Russisch, Polnisch oder Portugiesisch)."
           },
           {
             "h": "Tastenkürzel",
@@ -2305,7 +2324,7 @@
       "title": "Erweiterung hinzufügen",
       "step1Intro": "Bevor du installierst, solltest du Folgendes wissen:",
       "reqSandbox": "Erweiterungen laufen in einem isolierten Panel: Sie erreichen nur die lokale API mit ihrem eigenen, eingeschränkten Token — kein externes Netzwerk, deine Daten können den Rechner nicht verlassen.",
-      "reqLangs": "Eine gültige Erweiterung liefert Beschreibung und Menüeinträge in drei Sprachen (Ungarisch, Englisch, Deutsch) — sonst lehnt der Installer sie ab.",
+      "reqLangs": "Eine gültige Erweiterung liefert Beschreibung und Menüeinträge auf Ungarisch, Englisch und Deutsch; Französisch, Italienisch, Spanisch, Russisch, Polnisch und Portugiesisch werden unterstützt, wenn sie angegeben sind — ohne die ersten drei lehnt der Installer sie ab.",
       "reqTheme": "Sie muss dem hellen UND dunklen Design folgen — mit dem offiziellen Stil-Kit automatisch.",
       "reqZip": "Eine Erweiterung ist eine einzelne .zip-Datei (mit manifest.json). Nach der Installation ist sie zunächst deaktiviert.",
       "step2Intro": "Wähle die .zip-Datei der Erweiterung. Der Installer prüft das Manifest — bei Fehlern zeigen wir genau, was nicht stimmt.",

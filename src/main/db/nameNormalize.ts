@@ -1,4 +1,4 @@
-import { People } from './repo'
+import { DismissedIssues, People } from './repo'
 import { norm } from '@shared/nameMatch'
 import type { NameGroup, Person } from '@shared/types'
 
@@ -21,6 +21,15 @@ const accentRank = (s: string): number =>
  * most common spelling (ties prefer the accented, then alphabetical form). These
  * are normalization candidates, not hard errors.
  */
+/** Group-dismissal key: the user said "this spelling set is fine as it is". */
+const groupDismissKey = (kind: 'surname' | 'given', key: string): string => `namevar|${kind}|${key}`
+
+/** Hide a variant group from the suggestions (persisted; restorable from the
+ *  hidden-issues view). */
+export function dismissNameGroup(kind: 'surname' | 'given', key: string): void {
+  DismissedIssues.add(groupDismissKey(kind, key))
+}
+
 function nameVariants(field: (p: Person) => string): NameGroup[] {
   const groups = new Map<string, Map<string, number>>()
   for (const p of People.list()) {
@@ -55,14 +64,34 @@ function nameVariants(field: (p: Person) => string): NameGroup[] {
   return out
 }
 
-/** Spelling/accent variants of surnames. */
+/** Spelling/accent variants of surnames (dismissed groups filtered out). */
 export function surnameVariants(): NameGroup[] {
-  return nameVariants((p) => p.surname)
+  const dismissed = DismissedIssues.all()
+  return nameVariants((p) => p.surname).filter((g) => !dismissed.has(groupDismissKey('surname', g.key)))
 }
 
-/** Spelling/accent variants of given (first) names. */
+/** Spelling/accent variants of given (first) names (dismissed filtered out). */
 export function givenNameVariants(): NameGroup[] {
-  return nameVariants((p) => p.givenName)
+  const dismissed = DismissedIssues.all()
+  return nameVariants((p) => p.givenName).filter((g) => !dismissed.has(groupDismissKey('given', g.key)))
+}
+
+/** The DISMISSED variant groups, with their current spellings — the
+ *  hidden-issues view renders and restores these. */
+export function dismissedNameGroups(): { key: string; kind: 'surname' | 'given'; variants: string[] }[] {
+  const out: { key: string; kind: 'surname' | 'given'; variants: string[] }[] = []
+  const byKind: Record<'surname' | 'given', Map<string, NameGroup>> = {
+    surname: new Map(nameVariants((p) => p.surname).map((g) => [g.key, g])),
+    given: new Map(nameVariants((p) => p.givenName).map((g) => [g.key, g]))
+  }
+  for (const key of DismissedIssues.list()) {
+    const m = /^namevar\|(surname|given)\|(.+)$/.exec(key)
+    if (!m) continue
+    const kind = m[1] as 'surname' | 'given'
+    const group = byKind[kind].get(m[2])
+    out.push({ key, kind, variants: group ? group.variants.map((v) => v.name) : [m[2]] })
+  }
+  return out
 }
 
 /**

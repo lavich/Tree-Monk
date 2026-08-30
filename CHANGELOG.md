@@ -2,6 +2,63 @@
 
 All notable changes to TreeMonk are documented here.
 
+## [1.10.7]
+
+### Added
+- **Six new UI languages**: French (contributed by @AntGervais), Italian,
+  Spanish, Russian (based on @lavich's translation), Polish and Portuguese —
+  full locale parity
+  (~1850 keys each incl. the built-in manual sections), localized month names
+  with grammatical variants, date qualifiers, CSV headers, historical events,
+  religion lists, website export, API docs and FamilySearch browser pages.
+  Correct Slavic plural forms (few/many) for Russian and Polish.
+- **Local API: source/citation/repository writes** for external research
+  tools (church-book citation helpers etc.):
+  `GET/POST /api/v1/sources` and `/api/v1/repositories` (idempotent via
+  `externalId`), `POST /api/v1/people/{id}/citations` and
+  `/api/v1/families/{id}/citations` (page, quality, note, event tag),
+  `GET/POST /api/v1/families/{id}/events` (a marriage belongs to the couple),
+  and `POST /api/v1/batch` — up to 100 operations in one atomic transaction
+  with `$ref` cross-references, so one capture is all-or-nothing. Documented
+  in /docs, the OpenAPI spec and the plugin developer guide.
+- **Exact search with quotes**: a person query wrapped in quotes ("Dosa") is
+  accent-sensitive — it finds only that exact spelling, never "Dósa"; the
+  unquoted search stays forgiving. Works on the People page and every
+  person picker.
+- **Hidden issues tab**: everything dismissed as a false positive — data
+  anomalies, name-variant suggestions and "not a duplicate" pairs — is listed
+  in one place (like FamilySearch's rejected hints) and can be restored
+  one by one; hidden anomalies show the affected people as clickable chips.
+- **Name-variant groups can be hidden** ("this spelling set is fine"), the
+  unify row shows WHO would be renamed (clickable list opening the profile),
+  and a **batch-rename box** rewrites any exact name to another in one click
+  ("Barbara" → "Borbála"), audit-logged and undoable.
+- **Expired FamilySearch session is now impossible to miss**: opening an
+  FS-mode tree after the 24h token lapsed pops a sign-in dialog (one click
+  re-runs the browser sign-in), and the topbar carries a persistent status
+  badge — green while connected, amber "sign-in needed" once expired. The
+  state also refreshes whenever the window regains focus, and starting any
+  FamilySearch action (person sync, pull-in-environment, change scan) with an
+  expired session pops the same sign-in dialog instead of a bare error.
+- **Map scope filter**: the map's control rail gained the same four circles
+  the dashboard and the People page use — everyone, or the root person's
+  bloodline / ancestors / descendants, with a married-in-spouses toggle — so
+  the map can show ONLY the family you mean, not every imported side branch.
+  The spouse toggle works on "Everyone" too: switching it off there narrows
+  the map to the root person's blood circle, dropping married-in branches.
+- **Christening-as-birth shortcut**: when a person has only a christening,
+  one click marks its date and place as the birth (only fills empty fields).
+
+### Fixed
+- **Dark basemap showed "API Key Required" tiles**: Carto locked its free
+  basemaps behind API keys, so the map's dark layer (and the corkboard's map
+  fragment) broke. Both now use key-free sources — the OpenFreeMap dark vector
+  style (same host as the light styles, labels localize too) and plain
+  OpenStreetMap raster tiles. No account or key needed, ever. (GitHub #11)
+- Person names now follow the UI language's order everywhere: the data-issue
+  details and map/atlas labels put the surname first for Hungarian, matching
+  the rest of the app.
+
 ## [1.10.0]
 
 ### Added

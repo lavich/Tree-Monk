@@ -2247,6 +2247,12 @@ export const DismissedIssues = {
   },
   add(key: string): void {
     getDb().prepare('INSERT OR IGNORE INTO dismissed_issues (key) VALUES (?)').run(key)
+  },
+  list(): string[] {
+    return (getDb().prepare('SELECT key FROM dismissed_issues').all() as { key: string }[]).map((r) => r.key)
+  },
+  remove(key: string): void {
+    getDb().prepare('DELETE FROM dismissed_issues WHERE key = ?').run(key)
   }
 }
 

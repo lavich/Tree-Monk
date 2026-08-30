@@ -30,7 +30,7 @@ import { buildPedigree, buildPersonDescendants, buildUnionCouple } from '../main
 import { detectKinship } from '../main/db/kinship'
 import { buildMapMarkers } from '../main/db/mapData'
 import { buildAtlasPoints } from '../main/db/atlasData'
-import { runSanityCheck } from '../main/db/sanity'
+import { hiddenIssues, runSanityCheck } from '../main/db/sanity'
 import { findRelationshipPath } from '../main/db/relationship'
 import { runPersonQuery, listSavedQueries } from '../main/db/query'
 import { dismissMerge, mergePeople, scanDuplicates } from '../main/db/duplicates'
@@ -322,7 +322,9 @@ export function createDemoApi(): TreeMonkApi {
     },
     sanity: {
       check: async () => runSanityCheck(),
-      dismiss: async () => blocked()
+      dismiss: async () => blocked(),
+      hidden: async () => hiddenIssues(),
+      restore: async () => blocked()
     },
     relationship: {
       find: async (fromId, toId) => findRelationshipPath(fromId, toId)
@@ -452,7 +454,8 @@ export function createDemoApi(): TreeMonkApi {
       surnameVariants: async () => surnameVariants(),
       givenNameVariants: async () => givenNameVariants(),
       normalizeSurname: async () => blocked(),
-      normalizeGivenName: async () => blocked()
+      normalizeGivenName: async () => blocked(),
+      dismissGroup: async () => blocked()
     },
     supportInvite: {
       status: async () => true,

@@ -787,7 +787,22 @@
       "moveParentSlot": "Áthelyezés a helyes szerepbe",
       "swapDone": "Szülők felcserélve.",
       "moveDone": "Áthelyezve a helyes szerepbe."
-    }
+    },
+    "tabHidden": "Elrejtettek",
+    "hiddenEmpty": "Nincs elrejtett jelzés. Amit a „Fals riasztás” vagy az elrejtés gombbal eltüntetsz, itt találod meg és állíthatod vissza.",
+    "hiddenAnomalies": "Elrejtett adathibák",
+    "hiddenNameGroups": "Elrejtett név-változat javaslatok",
+    "hiddenMerges": "Nem duplikátumok",
+    "restore": "Visszaállítás",
+    "restored": "Visszaállítva — a következő ellenőrzésben újra megjelenik.",
+    "groupHidden": "Javaslat elrejtve — az Elrejtettek fülön visszaállítható.",
+    "hideGroup": "Nekem így jó — javaslat elrejtése",
+    "affected": "{{count}} érintett",
+    "affectedTitle": "Kiket írna át? Kattints a listához.",
+    "customRenameTitle": "Kötegelt átnevezés",
+    "customRenameFrom": "Erről…",
+    "customRenameTo": "Erre…",
+    "customRenameCount": "{{count}} találat"
   },
   "query": {
     "title": "Lekérdezés-építő",
@@ -1382,7 +1397,8 @@
       "priest": "pap",
       "witness": "tanú",
       "undertaker": "temetkező"
-    }
+    },
+    "copyChristeningToBirth": "Keresztelő dátuma és helye legyen a születés"
   },
   "research": {
     "history": "Kutatási előzmények",
@@ -1683,7 +1699,10 @@
     "confirmPhase1": "Először a fa szerkezete és az alapadatok töltődnek le — a források, jegyzetek és fotók csak a legvégén érkeznek meg, ez a hosszabbik rész.",
     "confirmPhase2": "A helységnevek egységesítése is az import után fut le — addig a statisztikában ugyanaz a település átmenetileg többször is szerepelhet.",
     "confirmPhase3": "Az import a háttérben fut: közben nyugodtan használhatod a programot, csak ne zárd be. Bármikor leállíthatod — ami addig bejött, megmarad.",
-    "confirmStart": "Indítás"
+    "confirmStart": "Indítás",
+    "sessionBadgeExpired": "FS: belépés szükséges",
+    "sessionModalTitle": "A FamilySearch-munkamenet lejárt",
+    "sessionModalBody": "A biztonság kedvéért a FamilySearch-belépés 24 óránként lejár. Jelentkezz be újra, hogy a szinkron és az import működjön — az adataid addig is elérhetők, semmi nem veszett el."
   },
   "demo": {
     "introTitle": "Üdv a TreeMonk demóban!",
@@ -1779,7 +1798,7 @@
           },
           {
             "h": "Megjelenés és nyelv",
-            "p": "A felső sávban a nap/hold ikonnal váltasz világos és sötét téma között, mellette pedig a felület nyelvét állítod be (magyar, angol vagy német)."
+            "p": "A felső sávban a nap/hold ikonnal váltasz világos és sötét téma között, mellette pedig a felület nyelvét állítod be (magyar, angol, német, francia, olasz, spanyol, orosz, lengyel vagy portugál)."
           },
           {
             "h": "Gyorsbillentyűk",
@@ -2305,7 +2324,7 @@
       "title": "Bővítmény hozzáadása",
       "step1Intro": "Mielőtt telepítesz, ezt érdemes tudni:",
       "reqSandbox": "A bővítmények elszigetelt panelben futnak: kizárólag a helyi API-t érik el a saját, szűkített tokenjükkel — külső hálózatot nem, így az adataid nem hagyhatják el a gépet.",
-      "reqLangs": "Egy szabályos bővítmény három nyelven (magyar, angol, német) adja meg a leírását és a menüpontjait — e nélkül a telepítő elutasítja.",
+      "reqLangs": "Egy szabályos bővítmény magyar, angol és német nyelven adja meg a leírását és a menüpontjait; a francia, az olasz, a spanyol, az orosz, a lengyel és a portugál akkor támogatott, ha meg van adva — az első három nélkül a telepítő elutasítja.",
       "reqTheme": "A világos ÉS sötét témát is követnie kell — a hivatalos stíluskészlettel ez automatikus.",
       "reqZip": "A bővítmény egyetlen .zip fájl (benne manifest.json). Telepítés után alapból kikapcsolva kerül a listába.",
       "step2Intro": "Válaszd ki a bővítmény .zip fájlját. A telepítő ellenőrzi a manifestet — ha hibás, pontosan megmutatjuk, mi a gond.",

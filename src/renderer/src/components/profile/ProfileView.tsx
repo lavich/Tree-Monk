@@ -78,6 +78,7 @@ import { useAtlasSettings, type AtlasBasemap } from '@/store/useAtlasSettings'
 import { useSettings } from '@/store/useSettings'
 import { useFsMode } from '@/hooks/useFsMode'
 import { cn, fullName, yearOf } from '@/lib/utils'
+import { ensureFsSession } from '@/lib/fsSession'
 import { smartNormalizeDate } from '@/lib/smartDate'
 import type { CitationDetail, Person, PersonInput, SanityIssue, Sex } from '@shared/types'
 
@@ -263,6 +264,18 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
   const copyBirthToChristening = (): void => {
     if (!person) return
     const next = { ...person, christeningDate: person.birthDate, christeningPlace: person.birthPlace }
+    setPerson(next)
+    void save(next)
+  }
+  // The reverse: registers often carry ONLY the christening — mark it as the
+  // birth too (fills only the EMPTY birth fields, never overwrites).
+  const copyChristeningToBirth = (): void => {
+    if (!person) return
+    const next = {
+      ...person,
+      birthDate: person.birthDate || person.christeningDate,
+      birthPlace: person.birthPlace || person.christeningPlace
+    }
     setPerson(next)
     void save(next)
   }
@@ -498,7 +511,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                   variant="outline"
                   size="sm"
                   className="gap-1.5 border-emerald-500/40 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400"
-                  onClick={() => setFsSyncOpen(true)}
+                  onClick={() => void ensureFsSession().then((ok) => ok && setFsSyncOpen(true))}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   {t('fs.pullBtn')}
@@ -507,7 +520,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                   variant="outline"
                   size="sm"
                   className="gap-1.5"
-                  onClick={() => setFsExpandOpen(true)}
+                  onClick={() => void ensureFsSession().then((ok) => ok && setFsExpandOpen(true))}
                 >
                   <Network className="h-3.5 w-3.5" />
                   {t('fsExpand.btn')}
@@ -743,7 +756,22 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
                       icon={Baby}
                       tint="text-emerald-600 dark:text-emerald-400"
                       title={t('person.birth')}
-                      action={<FactSources citations={factCites} tags={['BIRT', 'CHR']} label={t('person.birth')} personId={person.id} addTag="BIRT" onAdded={reloadCites} />}
+                      action={
+                        <>
+                          {(person.christeningDate || person.christeningPlace) && (!person.birthDate || !person.birthPlace) && (
+                            <button
+                              type="button"
+                              onClick={copyChristeningToBirth}
+                              title={t('person.copyChristeningToBirth')}
+                              aria-label={t('person.copyChristeningToBirth')}
+                              className="flex h-6 w-6 items-center justify-center rounded-md border border-primary/30 bg-primary/5 text-primary transition-colors hover:bg-primary/10"
+                            >
+                              <ArrowDownToLine className="h-3 w-3 rotate-180" />
+                            </button>
+                          )}
+<FactSources citations={factCites} tags={['BIRT', 'CHR']} label={t('person.birth')} personId={person.id} addTag="BIRT" onAdded={reloadCites} />
+                        </>
+                      }
                     >
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Field label={t('person.date')}>
@@ -981,7 +1009,7 @@ export function ProfileView({ personId: personIdProp }: { personId?: string } = 
         <FsExpandDialog
           open={fsExpandOpen}
           onOpenChange={setFsExpandOpen}
-          personName={`${person.givenName ?? ''} ${person.surname ?? ''}`.trim()}
+          personName={fullName(person)}
           fid={person.fsId!}
         />
       )}

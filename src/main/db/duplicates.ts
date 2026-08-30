@@ -156,6 +156,16 @@ export function dismissMerge(aId: string, bId: string): void {
   getDb().prepare('INSERT OR IGNORE INTO dismissed_merges (key) VALUES (?)').run(pairKey(aId, bId))
 }
 
+/** Every dismissed "not a duplicate" pair key (`idA|idB`, sorted). */
+export function listDismissedMerges(): string[] {
+  return (getDb().prepare('SELECT key FROM dismissed_merges').all() as { key: string }[]).map((r) => r.key)
+}
+
+/** Un-dismiss a pair — it shows up in the next duplicate scan again. */
+export function restoreMerge(key: string): void {
+  getDb().prepare('DELETE FROM dismissed_merges WHERE key = ?').run(key)
+}
+
 // ---------------- Merge ----------------
 
 type Row = Record<string, unknown>

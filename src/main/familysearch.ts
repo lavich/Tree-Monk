@@ -198,6 +198,42 @@ const BROWSER_TEXTS: Record<string, { okTitle: string; okMsg: string; errTitle: 
     okMsg: 'You are signed in. You can close this tab and return to TreeMonk.',
     errTitle: 'Sign-in failed',
     errMsg: 'Something went wrong. Please close this tab and try again in TreeMonk.'
+  },
+  fr: {
+    okTitle: 'Connexion réussie à FamilySearch',
+    okMsg: 'Vous êtes connecté(e). Vous pouvez fermer cet onglet et retourner dans TreeMonk.',
+    errTitle: 'Échec de la connexion',
+    errMsg: 'Une erreur est survenue. Fermez cet onglet et réessayez dans TreeMonk.'
+  },
+  it: {
+    okTitle: 'Accesso a FamilySearch riuscito',
+    okMsg: 'Sei connesso. Puoi chiudere questa scheda e tornare a TreeMonk.',
+    errTitle: 'Accesso non riuscito',
+    errMsg: 'Qualcosa è andato storto. Chiudi questa scheda e riprova in TreeMonk.'
+  },
+  es: {
+    okTitle: 'Sesión iniciada en FamilySearch',
+    okMsg: 'Has iniciado sesión. Puedes cerrar esta pestaña y volver a TreeMonk.',
+    errTitle: 'Error al iniciar sesión',
+    errMsg: 'Algo salió mal. Cierra esta pestaña e inténtalo de nuevo en TreeMonk.'
+  },
+  ru: {
+    okTitle: 'Вход в FamilySearch выполнен',
+    okMsg: 'Вы вошли в систему. Можно закрыть эту вкладку и вернуться в TreeMonk.',
+    errTitle: 'Не удалось войти',
+    errMsg: 'Что-то пошло не так. Закройте эту вкладку и попробуйте снова в TreeMonk.'
+  },
+  pl: {
+    okTitle: 'Zalogowano do FamilySearch',
+    okMsg: 'Jesteś zalogowany/a. Możesz zamknąć tę kartę i wrócić do TreeMonk.',
+    errTitle: 'Logowanie nie powiodło się',
+    errMsg: 'Coś poszło nie tak. Zamknij tę kartę i spróbuj ponownie w TreeMonk.'
+  },
+  pt: {
+    okTitle: 'Sessão iniciada no FamilySearch',
+    okMsg: 'Você está conectado. Pode fechar esta guia e voltar ao TreeMonk.',
+    errTitle: 'Falha ao entrar',
+    errMsg: 'Algo deu errado. Feche esta guia e tente novamente no TreeMonk.'
   }
 }
 

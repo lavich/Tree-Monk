@@ -1,6 +1,6 @@
 /**
  * Self-contained /docs page for the local API — no external assets (works
- * fully offline), trilingual (HU / EN / DE), endpoint list rendered live from
+ * fully offline), multilingual (HU / EN / DE / FR), endpoint list rendered live from
  * /api/v1/openapi.json so it can never drift from the actual surface.
  */
 export const DOCS_HTML = `<!doctype html>
@@ -35,9 +35,9 @@ export const DOCS_HTML = `<!doctype html>
 <body>
 <div class="wrap">
   <div class="langs">
-    <button data-l="hu">HU</button><button data-l="en" class="on">EN</button><button data-l="de">DE</button>
+    <button data-l="hu">HU</button><button data-l="en" class="on">EN</button><button data-l="de">DE</button><button data-l="fr">FR</button><button data-l="it">IT</button><button data-l="es">ES</button><button data-l="ru">RU</button><button data-l="pl">PL</button><button data-l="pt">PT</button>
   </div>
-  <h1>TreeMonk Local API</h1>
+  <h1 data-i="title"></h1>
   <p class="mut" data-i="tagline"></p>
   <div class="warn" data-i="security"></div>
   <h2 data-i="authTitle"></h2>
@@ -51,28 +51,90 @@ export const DOCS_HTML = `<!doctype html>
 <script>
 const T = {
   hu: {
+    title: 'TreeMonk helyi API',
     tagline: 'A családfád adatai HTTP-n keresztül — kizárólag ezen a gépen (127.0.0.1).',
     security: 'A szerver csak a 127.0.0.1 címre csatlakozik, a hálózatról nem érhető el. Minden adat-végponthoz a Beállításokban látható Bearer token kell. Az írás külön kapcsoló mögött van.',
     authTitle: 'Hitelesítés', authBody: 'Minden kéréshez add hozzá az Authorization fejlécet a Beállításokban másolható tokennel:',
-    epTitle: 'Végpontok', exTitle: 'Python-példa'
+    epTitle: 'Végpontok', exTitle: 'Python-példa', unavailable: 'Az openapi.json nem érhető el'
   },
   en: {
+    title: 'TreeMonk Local API',
     tagline: 'Your family-tree data over HTTP — strictly on this machine (127.0.0.1).',
     security: 'The server binds to 127.0.0.1 only and is not reachable from the network. Every data endpoint requires the Bearer token shown in Settings. Writes sit behind a separate toggle.',
     authTitle: 'Authentication', authBody: 'Add the Authorization header with the token copied from Settings to every request:',
-    epTitle: 'Endpoints', exTitle: 'Python example'
+    epTitle: 'Endpoints', exTitle: 'Python example', unavailable: 'openapi.json unavailable'
   },
   de: {
+    title: 'TreeMonk lokale API',
     tagline: 'Deine Stammbaum-Daten über HTTP — ausschließlich auf diesem Rechner (127.0.0.1).',
     security: 'Der Server bindet nur an 127.0.0.1 und ist aus dem Netzwerk nicht erreichbar. Jeder Daten-Endpunkt erfordert das Bearer-Token aus den Einstellungen. Schreibzugriffe stehen hinter einem separaten Schalter.',
     authTitle: 'Authentifizierung', authBody: 'Füge jeder Anfrage den Authorization-Header mit dem Token aus den Einstellungen hinzu:',
-    epTitle: 'Endpunkte', exTitle: 'Python-Beispiel'
+    epTitle: 'Endpunkte', exTitle: 'Python-Beispiel', unavailable: 'openapi.json nicht verfügbar'
+  },
+  fr: {
+    title: 'API locale TreeMonk',
+    tagline: 'Les données de votre arbre généalogique en HTTP — strictement sur cette machine (127.0.0.1).',
+    security: 'Le serveur écoute uniquement sur 127.0.0.1 et n’est pas accessible depuis le réseau. Chaque endpoint de données nécessite le token Bearer affiché dans les paramètres. Les écritures sont protégées par un interrupteur séparé.',
+    authTitle: 'Authentification', authBody: 'Ajoutez à chaque requête l’en-tête Authorization avec le token copié depuis les paramètres :',
+    epTitle: 'Endpoints', exTitle: 'Exemple Python', unavailable: 'openapi.json est indisponible'
+  },
+  it: {
+    title: 'API locale di TreeMonk',
+    tagline: 'I dati del tuo albero genealogico via HTTP — esclusivamente su questo computer (127.0.0.1).',
+    security: 'Il server è in ascolto solo su 127.0.0.1 e non è raggiungibile dalla rete. Ogni endpoint dati richiede il token Bearer mostrato nelle Impostazioni. Le scritture sono protette da un interruttore separato.',
+    authTitle: 'Autenticazione', authBody: 'Aggiungi a ogni richiesta l’header Authorization con il token copiato dalle Impostazioni:',
+    epTitle: 'Endpoint', exTitle: 'Esempio Python', unavailable: 'openapi.json non disponibile'
+  },
+  es: {
+    title: 'API local de TreeMonk',
+    tagline: 'Los datos de tu árbol genealógico por HTTP — estrictamente en este equipo (127.0.0.1).',
+    security: 'El servidor solo escucha en 127.0.0.1 y no es accesible desde la red. Cada endpoint de datos requiere el token Bearer que se muestra en Ajustes. Las escrituras están detrás de un interruptor separado.',
+    authTitle: 'Autenticación', authBody: 'Añade a cada solicitud la cabecera Authorization con el token copiado de Ajustes:',
+    epTitle: 'Endpoints', exTitle: 'Ejemplo en Python', unavailable: 'openapi.json no disponible'
+  },
+  ru: {
+    title: 'Локальный API TreeMonk',
+    tagline: 'Данные вашего родословного дерева по HTTP — строго на этой машине (127.0.0.1).',
+    security: 'Сервер привязан только к 127.0.0.1 и недоступен из сети. Каждая конечная точка данных требует токен Bearer, показанный в Настройках. Запись включается отдельным переключателем.',
+    authTitle: 'Аутентификация', authBody: 'Добавляйте к каждому запросу заголовок Authorization с токеном, скопированным в Настройках:',
+    epTitle: 'Конечные точки', exTitle: 'Пример на Python', unavailable: 'openapi.json недоступен'
+  },
+  pl: {
+    title: 'Lokalne API TreeMonk',
+    tagline: 'Dane twojego drzewa genealogicznego przez HTTP — wyłącznie na tym komputerze (127.0.0.1).',
+    security: 'Serwer nasłuchuje tylko na 127.0.0.1 i nie jest dostępny z sieci. Każdy punkt danych wymaga tokenu Bearer pokazanego w Ustawieniach. Zapis włącza się osobnym przełącznikiem.',
+    authTitle: 'Uwierzytelnianie', authBody: 'Do każdego żądania dodaj nagłówek Authorization z tokenem skopiowanym z Ustawień:',
+    epTitle: 'Punkty końcowe', exTitle: 'Przykład w Pythonie', unavailable: 'openapi.json niedostępny'
+  },
+  pt: {
+    title: 'API local do TreeMonk',
+    tagline: 'Os dados da sua árvore genealógica por HTTP — estritamente nesta máquina (127.0.0.1).',
+    security: 'O servidor escuta apenas em 127.0.0.1 e não é acessível pela rede. Cada endpoint de dados exige o token Bearer mostrado nas Configurações. A escrita fica atrás de um interruptor separado.',
+    authTitle: 'Autenticação', authBody: 'Adicione a cada solicitação o cabeçalho Authorization com o token copiado das Configurações:',
+    epTitle: 'Endpoints', exTitle: 'Exemplo em Python', unavailable: 'openapi.json indisponível'
   }
 }
+let activeLang = 'en'
+let apiSpec = null
 function setLang(l){
+  if (!T[l]) l = 'en'
+  activeLang = l
   document.querySelectorAll('.langs button').forEach(b=>b.classList.toggle('on',b.dataset.l===l))
   document.querySelectorAll('[data-i]').forEach(el=>{ el.textContent = T[l][el.dataset.i] })
   localStorage.setItem('tm.docs.lang', l)
+  if (apiSpec) renderEndpoints(apiSpec)
+}
+function renderEndpoints(spec){
+  const eps = document.getElementById('eps'); eps.textContent=''
+  for (const [path, methods] of Object.entries(spec.paths)) {
+    for (const [m, op] of Object.entries(methods)) {
+      const d = document.createElement('div'); d.className='ep'
+      d.innerHTML = '<span class="m '+m.toUpperCase()+'">'+m.toUpperCase()+'</span><span class="path"></span><span class="sum"></span>'
+      d.querySelector('.path').textContent = path
+      d.querySelector('.sum').textContent = op.summary || ''
+      eps.appendChild(d)
+    }
+  }
 }
 document.querySelectorAll('.langs button').forEach(b=>b.onclick=()=>setLang(b.dataset.l))
 const base = location.origin
@@ -85,19 +147,9 @@ H = {"Authorization": "Bearer <TOKEN>"}
 people = requests.get(f"{BASE}/api/v1/people", headers=H, params={"q": "Kiss"}).json()
 for p in people["items"]:
     print(p["givenName"], p["surname"], p["birthDate"])\`
-fetch('/api/v1/openapi.json').then(r=>r.json()).then(spec=>{
-  const eps = document.getElementById('eps'); eps.textContent=''
-  for (const [path, methods] of Object.entries(spec.paths)) {
-    for (const [m, op] of Object.entries(methods)) {
-      const d = document.createElement('div'); d.className='ep'
-      d.innerHTML = '<span class="m '+m.toUpperCase()+'">'+m.toUpperCase()+'</span><span class="path"></span><span class="sum"></span>'
-      d.querySelector('.path').textContent = path
-      d.querySelector('.sum').textContent = op.summary || ''
-      eps.appendChild(d)
-    }
-  }
-}).catch(()=>{ document.getElementById('eps').textContent = 'openapi.json unavailable' })
-setLang(localStorage.getItem('tm.docs.lang') || (navigator.language||'en').slice(0,2).replace(/^(?!hu|de).*$/,'en'))
+fetch('/api/v1/openapi.json').then(r=>r.json()).then(spec=>{ apiSpec = spec; renderEndpoints(spec) })
+  .catch(()=>{ document.getElementById('eps').textContent = T[activeLang].unavailable })
+setLang(localStorage.getItem('tm.docs.lang') || (navigator.language||'en').slice(0,2).replace(/^(?!hu|de|fr|it|es|ru|pl|pt).*$/,'en'))
 </script>
 </body>
 </html>`

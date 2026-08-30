@@ -1,5 +1,5 @@
 import { getDb } from './connection'
-import { Families, People, Places } from './repo'
+import { AppSettings, Families, People, Places } from './repo'
 import type { AtlasKind, AtlasPoint, Sex } from '@shared/types'
 
 /**
@@ -25,6 +25,15 @@ interface EventPlaceRow {
   given_name: string
   surname: string
   sex: Sex
+}
+
+
+/** Display name in the stored UI language's order (hu: surname first). */
+function orderedName(given: string | null | undefined, surname: string | null | undefined): string {
+  const g = (given ?? '').trim()
+  const sn = (surname ?? '').trim()
+  const hu = (AppSettings.get('app_language') ?? '').startsWith('hu')
+  return (hu ? `${sn} ${g}` : `${g} ${sn}`).trim() || '—'
 }
 
 export function buildAtlasPoints(): AtlasPoint[] {
@@ -53,7 +62,7 @@ export function buildAtlasPoints(): AtlasPoint[] {
     out.push({
       kind,
       personId,
-      personName: `${p.givenName} ${p.surname}`.trim() || '—',
+      personName: orderedName(p.givenName, p.surname),
       sex: p.sex,
       year: yearNum(date),
       date,
@@ -104,7 +113,7 @@ export function buildAtlasPoints(): AtlasPoint[] {
     out.push({
       kind: residence ? 'residence' : 'other',
       personId: r.owner_id,
-      personName: `${r.given_name} ${r.surname}`.trim() || '—',
+      personName: orderedName(r.given_name, r.surname),
       sex: r.sex,
       year: yearNum(r.date),
       date: r.date,

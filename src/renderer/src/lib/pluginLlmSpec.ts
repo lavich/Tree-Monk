@@ -3,8 +3,8 @@
  * document — the "Copy for AI" button on the plugin dev guide puts this on
  * the clipboard so the user can paste it into any LLM and say "build me a
  * plugin that …". English on purpose: it is the most reliable prompt language
- * across models; the OUTPUT (the plugin) must still be trilingual, and the
- * spec says so emphatically.
+ * across models; the OUTPUT (the plugin) must still provide the three required
+ * languages, with further languages (fr/it/es/ru/pl/pt) supported when supplied, and the spec says so emphatically.
  */
 
 /**
@@ -264,14 +264,15 @@ It runs as a **sandboxed iframe panel** inside the app:
   "description": {
     "hu": "Rövid leírás magyarul.",
     "en": "A short description in English.",
-    "de": "Eine kurze Beschreibung auf Deutsch."
+    "de": "Eine kurze Beschreibung auf Deutsch.",
+    "fr": "Une courte description en français."
   },
   "icon": "icon.svg",
   "permissions": ["read"],
   "menu": [
     {
       "id": "main",
-      "title": { "hu": "Saját nézet", "en": "My view", "de": "Meine Ansicht" },
+      "title": { "hu": "Saját nézet", "en": "My view", "de": "Meine Ansicht", "fr": "Ma vue" },
       "entry": "index.html"
     }
   ]
@@ -282,12 +283,12 @@ Rules (violations = install rejected):
 - \`id\`: lowercase letters/digits/dashes, 2–64 chars, must match the folder;
   \`"sdk"\` is reserved.
 - \`name\`, \`version\`: non-empty strings.
-- \`description\`: an OBJECT with non-empty \`hu\`, \`en\` AND \`de\` strings.
+- \`description\`: an OBJECT with non-empty \`hu\`, \`en\` AND \`de\` strings. Add \`fr\`/\`it\`/\`es\`/\`ru\`/\`pl\`/\`pt\` when providing those languages.
   A plain string or a missing language is rejected.
 - \`permissions\`: array; allowed values only \`"read"\`, \`"write"\`,
   \`"documents"\`. Request ONLY what you use.
 - \`menu\`: at least one entry. Each entry: \`id\` (slug), \`title\` (OBJECT
-  with non-empty hu+en+de — enforced), \`entry\` (relative path to an .html
+  with non-empty hu+en+de — enforced; fr is supported when present), \`entry\` (relative path to an .html
   file inside the zip; no "..").
 - \`icon\` (optional): an svg/png/webp path inside the zip, or an emoji.
   Prefer a Lucide-style SVG (24×24 viewBox, fill="none", stroke="#000",
@@ -302,7 +303,7 @@ The entry page receives its configuration in the **URL hash**:
 |---|---|
 | \`api\`   | \`http://127.0.0.1:<port>\` — local API base |
 | \`token\` | the plugin's scoped Bearer token |
-| \`lang\`  | \`hu\` \\| \`en\` \\| \`de\` — current app language |
+| \`lang\`  | \`hu\` \\| \`en\` \\| \`de\` \\| \`fr\` \\| \`it\` \\| \`es\` \\| \`ru\` \| \`pl\` \| \`pt\` — current app language |
 | \`theme\` | \`light\` \\| \`dark\` — current app theme |
 
 ## The official SDK (use it)
@@ -316,7 +317,7 @@ Load both files from the app-served \`sdk\` host (works offline):
 
 \`treemonk.js\` parses the hash, sets \`<html data-theme="light|dark">\` and
 exposes \`window.TM\`:
-- \`TM.t({hu, en, de})\` → the string for the current app language.
+- \`TM.t({hu, en, de, …})\` → the string for the current app language.
 - \`TM.fetch(path, opts?)\` → \`fetch\` against the local API with the
   Authorization header set; JSON responses are parsed; non-2xx throws
   \`Error('API <status>')\`. Example: \`TM.fetch('/api/v1/people?q=kiss')\`.
@@ -338,8 +339,8 @@ what makes dark mode automatic.
 
 ## MANDATORY quality rules
 
-1. Every user-visible string goes through \`TM.t({hu, en, de})\` — the plugin
-   must be fully usable in Hungarian, English and German.
+1. Every user-visible string goes through \`TM.t({hu, en, de, fr})\` — the plugin
+   must be fully usable in Hungarian, English and German, with French where provided.
 2. Both themes must look right (free if you use the SDK variables).
 3. Render user-sourced data (names, notes…) with \`textContent\`, NEVER with
    \`innerHTML\` string interpolation — genealogy data can contain anything.
@@ -400,6 +401,27 @@ Ids are opaque strings; never invent them, always look them up first.
 - \`POST /api/v1/families\` body: FamilyInput → created \`Family\` (201)
 - \`PATCH /api/v1/families/{id}\` body: partial FamilyInput → updated \`Family\`
 - \`DELETE /api/v1/families/{id}\`
+- \`GET /api/v1/sources?q=<substring>\` → \`Source[]\`;
+  \`GET /api/v1/repositories\` → \`Repository[]\` (both readable with read permission)
+- \`POST /api/v1/sources\` body: { externalId?, title, author?, publication?,
+  repositoryId?, text?, recordDate? } → \`Source\`. Passing the SAME
+  \`externalId\` again updates instead of duplicating (idempotent capture).
+- \`POST /api/v1/repositories\` body: { externalId?, name, address? } →
+  \`Repository\` (same externalId dedup)
+- \`POST /api/v1/people/{id}/citations\` and
+  \`POST /api/v1/families/{id}/citations\` body: { sourceId, eventTag?
+  (BIRT/CHR/MARR/…), page?, quality? (primary/secondary/questionable), note? }
+  → \`Citation\`. Put a scan permalink in \`note\` (or \`page\`).
+- \`GET|POST /api/v1/families/{id}/events\` — family (union) events; a church
+  or civil marriage belongs to the couple, not to one person.
+- \`POST /api/v1/batch\` body: { operations: [{ op, ref?, data }] } — up to 100
+  operations in ONE atomic SQLite transaction (all-or-nothing). Later
+  operations reference earlier results by \`"$ref"\` in any string field. Ops:
+  \`repository.upsert\`, \`source.upsert\`, \`person.create\`,
+  \`person.update\`, \`family.create\`, \`family.update\`,
+  \`event.create\` (ownerType person|family), \`citation.create\`.
+  Perfect for "one capture = one transaction" flows from external research
+  tools.
 
 ### documents permission
 
@@ -533,11 +555,11 @@ ${API_EXAMPLES}
     <div id="out" class="tm-state"></div>
     <script>
       const T = {
-        title: TM.t({ hu: 'Hosszú élet toplista', en: 'Longevity top list', de: 'Langlebigkeit-Topliste' }),
-        loading: TM.t({ hu: 'Betöltés…', en: 'Loading…', de: 'Laden…' }),
-        years: TM.t({ hu: 'év', en: 'yrs', de: 'J.' }),
-        none: TM.t({ hu: 'Nincs elég adat.', en: 'Not enough data.', de: 'Zu wenig Daten.' }),
-        error: TM.t({ hu: 'Nem sikerült elérni a helyi API-t.', en: 'Could not reach the local API.', de: 'Lokale API nicht erreichbar.' })
+        title: TM.t({ hu: 'Hosszú élet toplista', en: 'Longevity top list', de: 'Langlebigkeit-Topliste', fr: 'Palmarès de longévité' }),
+        loading: TM.t({ hu: 'Betöltés…', en: 'Loading…', de: 'Laden…', fr: 'Chargement…' }),
+        years: TM.t({ hu: 'év', en: 'yrs', de: 'J.', fr: 'ans' }),
+        none: TM.t({ hu: 'Nincs elég adat.', en: 'Not enough data.', de: 'Zu wenig Daten.', fr: 'Pas assez de données.' }),
+        error: TM.t({ hu: 'Nem sikerült elérni a helyi API-t.', en: 'Could not reach the local API.', de: 'Lokale API nicht erreichbar.', fr: "Impossible d'atteindre l'API locale." })
       }
       document.getElementById('title').textContent = T.title
       const out = document.getElementById('out')
@@ -577,7 +599,7 @@ installer rejects it, it shows the exact validator message — fix and re-zip.
 
 ## Final checklist (verify before you output)
 
-- [ ] description + every menu title has non-empty hu, en AND de
+- [ ] description + every menu title has non-empty hu, en AND de; add fr when supported
 - [ ] every visible string uses TM.t({...})
 - [ ] SDK css+js loaded from tmplugin://sdk/…, colors only via --tm-* vars
 - [ ] user data rendered via textContent (no HTML injection)

@@ -34,7 +34,8 @@ import { LANGUAGES, setLanguage } from '@/i18n'
 import { useAppStore } from '@/store/useAppStore'
 import { useTheme } from '@/store/useTheme'
 import { useFsMode } from '@/hooks/useFsMode'
-import type { AppLanguage } from '@shared/types'
+import { useFsSession } from '@/hooks/useFsSession'
+import { FsSessionDialog } from '@/components/common/FsSessionDialog'
 
 export function Topbar(): JSX.Element {
   const { t, i18n } = useTranslation()
@@ -43,6 +44,8 @@ export function Topbar(): JSX.Element {
   const toggleTheme = useTheme((s) => s.toggle)
   const [exportOpen, setExportOpen] = useState(false)
   const fsMode = useFsMode()
+  const { status: fsSession, recheck: recheckFsSession } = useFsSession()
+  const [fsSessionOpen, setFsSessionOpen] = useState(false)
 
   const onImportGedcom = async (): Promise<void> => {
     const res = await importGedcomWithToast(t)
@@ -85,6 +88,27 @@ export function Topbar(): JSX.Element {
 
         {/* Roomy screens: the full control row. */}
         <div className="hidden items-center gap-2 lg:flex">
+          {/* FamilySearch session state (FS-mode trees only): green dot while
+              the token is alive, amber sign-in badge once it expired. */}
+          {fsSession === 'ok' && (
+            <span
+              title={t('fs.connected')}
+              className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              FamilySearch
+            </span>
+          )}
+          {fsSession === 'expired' && (
+            <button
+              onClick={() => setFsSessionOpen(true)}
+              title={t('fs.sessionModalTitle')}
+              className="flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400"
+            >
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+              {t('fs.sessionBadgeExpired')}
+            </button>
+          )}
           <Separator orientation="vertical" className="h-6" />
 
           {/* Import a GEDCOM file — Manual mode only (FS mode is strictly FS-fed). */}
@@ -182,7 +206,7 @@ export function Topbar(): JSX.Element {
             {LANGUAGES.map((lang) => (
               <DropdownMenuItem
                 key={lang.code}
-                onSelect={() => setLanguage(lang.code as AppLanguage)}
+                onSelect={() => setLanguage(lang.code)}
                 className={i18n.language === lang.code ? 'gap-2 bg-accent' : 'gap-2'}
               >
                 <span className="text-base">{lang.flag}</span>
@@ -194,6 +218,7 @@ export function Topbar(): JSX.Element {
       </div>
 
       <ExportGedcomDialog open={exportOpen} onOpenChange={setExportOpen} />
-    </header>
+      <FsSessionDialog open={fsSessionOpen} onOpenChange={setFsSessionOpen} onSignedIn={() => void recheckFsSession()} />
+      </header>
   )
 }

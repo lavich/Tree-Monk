@@ -3,22 +3,37 @@ import { initReactI18next } from 'react-i18next'
 import hu from './locales/hu.json'
 import en from './locales/en.json'
 import de from './locales/de.json'
+import fr from './locales/fr.json'
+import it from './locales/it.json'
+import es from './locales/es.json'
+import ru from './locales/ru.json'
+import pl from './locales/pl.json'
+import pt from './locales/pt.json'
 import type { AppLanguage } from '@shared/types'
+import { APP_LANGUAGES, isAppLanguage } from '@shared/languages'
 
-export const LANGUAGES: { code: AppLanguage; label: string; flag: string }[] = [
-  { code: 'hu', label: 'Magyar', flag: '🇭🇺' },
-  { code: 'en', label: 'English', flag: '🇬🇧' },
-  { code: 'de', label: 'Deutsch', flag: '🇩🇪' }
-]
+const LANGUAGE_META: Record<AppLanguage, { label: string; flag: string }> = {
+  hu: { label: 'Magyar', flag: '🇭🇺' },
+  en: { label: 'English', flag: '🇬🇧' },
+  de: { label: 'Deutsch', flag: '🇩🇪' },
+  fr: { label: 'Français', flag: '🇫🇷' },
+  it: { label: 'Italiano', flag: '🇮🇹' },
+  es: { label: 'Español', flag: '🇪🇸' },
+  ru: { label: 'Русский', flag: '🇷🇺' },
+  pl: { label: 'Polski', flag: '🇵🇱' },
+  pt: { label: 'Português', flag: '🇵🇹' }
+}
+
+export const LANGUAGES = APP_LANGUAGES.map((code) => ({ code, ...LANGUAGE_META[code] }))
 
 const STORAGE_KEY = 'treemonk.lang'
 
 function initialLang(): AppLanguage {
-  const stored = localStorage.getItem(STORAGE_KEY) as AppLanguage | null
-  if (stored && LANGUAGES.some((l) => l.code === stored)) return stored
+  const stored = localStorage.getItem(STORAGE_KEY)
+  if (stored && isAppLanguage(stored)) return stored
   // No saved choice yet → follow the OS / browser language if we support it…
   const sys = (navigator.language || '').slice(0, 2).toLowerCase()
-  if (LANGUAGES.some((l) => l.code === sys)) return sys as AppLanguage
+  if (isAppLanguage(sys)) return sys
   return 'hu' // …otherwise Hungarian.
 }
 
@@ -26,7 +41,13 @@ i18n.use(initReactI18next).init({
   resources: {
     hu: { translation: hu },
     en: { translation: en },
-    de: { translation: de }
+    de: { translation: de },
+    fr: { translation: fr },
+    it: { translation: it },
+    es: { translation: es },
+    ru: { translation: ru },
+    pl: { translation: pl },
+    pt: { translation: pt }
   },
   lng: initialLang(),
   fallbackLng: 'en',

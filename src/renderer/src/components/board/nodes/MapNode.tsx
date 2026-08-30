@@ -23,9 +23,9 @@ function project(lat: number, lng: number, z: number): { x: number; y: number } 
 }
 
 /** A static raster map centred on (lat,lng), filling w×h. No interactivity —
- *  it's a torn map fragment for the corkboard. Tiles come from Carto (NOT from
+ *  it's a torn map fragment for the corkboard. Tiles come from OpenStreetMap (NOT from
  *  tile.openstreetmap.org: the OSMF tile policy forbids distributed apps using
- *  the community tile server). © OpenStreetMap © CARTO (required). */
+ *  a keyed provider — Carto locked its basemaps behind API keys). © OpenStreetMap. */
 function MapTiles({ lat, lng, w, h }: { lat: number; lng: number; w: number; h: number }): JSX.Element {
   const tiles = useMemo(() => {
     const n = 2 ** ZOOM
@@ -38,7 +38,7 @@ function MapTiles({ lat, lng, w, h }: { lat: number; lng: number; w: number; h: 
         if (ty < 0 || ty >= n) continue
         const wx = ((tx % n) + n) % n
         out.push({
-          src: `https://${'abcd'[(wx + ty) % 4]}.basemaps.cartocdn.com/rastertiles/voyager/${ZOOM}/${wx}/${ty}.png`,
+          src: `https://tile.openstreetmap.org/${ZOOM}/${wx}/${ty}.png`,
           left: tx * TILE - left,
           top: ty * TILE - top
         })
@@ -113,7 +113,7 @@ function MapNodeImpl({ id, data, selected, dragging }: NodeProps): JSX.Element {
 
           {/* Required OSM attribution. */}
           <span className="absolute bottom-0 right-0 z-10 bg-white/55 px-1 text-[8px] leading-tight text-zinc-700">
-            © OpenStreetMap © CARTO
+            © OpenStreetMap
           </span>
         </div>
 

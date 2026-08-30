@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ensureFsSession } from '@/lib/fsSession'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { AlertTriangle, Globe2, Landmark, ArrowDownToLine, BadgeCheck, Camera, ChevronDown, ChevronRight, Copy, ExternalLink, Loader2, MapPin, Maximize2, Network, Printer, RefreshCw, Route, Search, Trash2, TreeDeciduous, X } from 'lucide-react'
@@ -277,6 +278,19 @@ export function PersonPanel(): JSX.Element | null {
     void save(next)
   }
 
+  // The reverse: registers often carry ONLY the christening — mark it as the
+  // birth too (fills only the EMPTY birth fields, never overwrites).
+  const copyChristeningToBirth = (): void => {
+    if (!person) return
+    const next = {
+      ...person,
+      birthDate: person.birthDate || person.christeningDate,
+      birthPlace: person.birthPlace || person.christeningPlace
+    }
+    setPerson(next)
+    void save(next)
+  }
+
   const close = (): void => {
     save()
     selectPerson(null)
@@ -497,10 +511,10 @@ export function PersonPanel(): JSX.Element | null {
               {fsMode && fsConfigured && isFamilySearchId(person.fsId) && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setFsSyncOpen(true)} className="gap-2">
+                  <DropdownMenuItem onClick={() => void ensureFsSession().then((ok) => ok && setFsSyncOpen(true))} className="gap-2">
                     <RefreshCw className="h-4 w-4 text-muted-foreground" /> {t('fs.pullBtn')}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setFsExpandOpen(true)} className="gap-2">
+                  <DropdownMenuItem onClick={() => void ensureFsSession().then((ok) => ok && setFsExpandOpen(true))} className="gap-2">
                     <Network className="h-4 w-4 text-muted-foreground" /> {t('fsExpand.btn')}
                   </DropdownMenuItem>
                 </>
@@ -759,7 +773,18 @@ export function PersonPanel(): JSX.Element | null {
                   <span>{t('person.private')}</span>
                 </label>
               </div>
-              <div className="col-span-2 -mb-1 flex justify-end">
+              <div className="col-span-2 -mb-1 flex flex-wrap justify-end gap-1.5">
+                {(person.christeningDate || person.christeningPlace) && (!person.birthDate || !person.birthPlace) && (
+                  <button
+                    type="button"
+                    onClick={copyChristeningToBirth}
+                    title={t('person.copyChristeningToBirth')}
+                    className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+                  >
+                    <ArrowDownToLine className="h-3 w-3 rotate-180" />
+                    {t('person.copyChristeningToBirth')}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={copyBirthToChristening}

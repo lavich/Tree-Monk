@@ -1,6 +1,7 @@
 import { writeFileSync } from 'fs'
 import { Attributes, Events, Families, Godparents, Occupations, People, Witnesses } from './db/repo'
 import type { Family, Person } from '@shared/types'
+import { resolveAppLanguage } from '@shared/languages'
 
 /**
  * Static-website export: ONE self-contained HTML file with a searchable person
@@ -10,7 +11,7 @@ import type { Family, Person } from '@shared/types'
  * placeholder with no data. Photos are intentionally not embedded (file size).
  */
 
-type Lang = 'hu' | 'en' | 'de'
+type Lang = 'hu' | 'en' | 'de' | 'fr' | 'it' | 'es' | 'ru' | 'pl' | 'pt'
 
 const L: Record<Lang, Record<string, string>> = {
   hu: {
@@ -123,6 +124,228 @@ const L: Record<Lang, Record<string, string>> = {
     bef: 'vor',
     aft: 'nach',
     illegitimate: 'uneheliches Kind'
+  },
+  fr: {
+    title: 'Arbre généalogique',
+    generated: 'Généré',
+    people: 'personnes',
+    families: 'familles',
+    search: 'Rechercher par nom…',
+    index: 'Index des noms',
+    birth: 'Né(e)',
+    christening: 'Baptisé(e)',
+    death: 'Décédé(e)',
+    burial: 'Inhumé(e)',
+    stillborn: 'mort-né(e)',
+    religion: 'Religion',
+    occupations: 'Profession',
+    events: 'Événements de la vie',
+    attributes: 'Autres faits',
+    parents: 'Parents',
+    unions: 'Mariages / unions',
+    spouse: 'Conjoint(e)',
+    marriage: 'Mariage',
+    children: 'Enfants',
+    godparents: 'Parrain et marraine',
+    witnesses: 'Témoins (baptême)',
+    marriageWitnesses: 'Témoins',
+    notes: 'Notes',
+    confidential: 'Personne confidentielle',
+    confidentialNote: 'Cette personne est marquée comme confidentielle — ses données n’ont pas été exportées.',
+    footer: 'Export d’arbre généalogique TreeMonk',
+    indexTitle: 'Index des noms et des lieux',
+    nameIndex: 'Index des noms',
+    placeIndex: 'Index des lieux',
+    legend: 'Légende : * naissance · ~ baptême · ⚭ mariage · † décès · ▭ inhumation · ⌂ résidence',
+    abt: 'vers',
+    bef: 'avant',
+    aft: 'après',
+    illegitimate: 'enfant illégitime'
+  },
+  it: {
+    title: 'Albero genealogico',
+    generated: 'Generato',
+    people: 'persone',
+    families: 'famiglie',
+    search: 'Cerca per nome…',
+    index: 'Indice dei nomi',
+    birth: 'Nato/a',
+    christening: 'Battezzato/a',
+    death: 'Deceduto/a',
+    burial: 'Sepolto/a',
+    stillborn: 'nato/a morto/a',
+    religion: 'Religione',
+    occupations: 'Professione',
+    events: 'Eventi della vita',
+    attributes: 'Altri fatti',
+    parents: 'Genitori',
+    unions: 'Matrimoni / unioni',
+    spouse: 'Coniuge',
+    marriage: 'Matrimonio',
+    children: 'Figli',
+    godparents: 'Padrino e madrina',
+    witnesses: 'Testimoni (battesimo)',
+    marriageWitnesses: 'Testimoni',
+    notes: 'Note',
+    confidential: 'Persona riservata',
+    confidentialNote: 'Questa persona è contrassegnata come riservata — i suoi dati non sono stati esportati.',
+    footer: 'Esportazione dell’albero genealogico TreeMonk',
+    indexTitle: 'Indice dei nomi e dei luoghi',
+    nameIndex: 'Indice dei nomi',
+    placeIndex: 'Indice dei luoghi',
+    legend: 'Legenda: * nascita · ~ battesimo · ⚭ matrimonio · † decesso · ▭ sepoltura · ⌂ residenza',
+    abt: 'verso',
+    bef: 'prima del',
+    aft: 'dopo il',
+    illegitimate: 'figlio/a illegittimo/a'
+  },
+  es: {
+    title: 'Árbol genealógico',
+    generated: 'Generado',
+    people: 'personas',
+    families: 'familias',
+    search: 'Buscar por nombre…',
+    index: 'Índice de nombres',
+    birth: 'Nacido/a',
+    christening: 'Bautizado/a',
+    death: 'Fallecido/a',
+    burial: 'Enterrado/a',
+    stillborn: 'nacido/a muerto/a',
+    religion: 'Religión',
+    occupations: 'Profesión',
+    events: 'Acontecimientos vitales',
+    attributes: 'Otros datos',
+    parents: 'Padres',
+    unions: 'Matrimonios / uniones',
+    spouse: 'Cónyuge',
+    marriage: 'Matrimonio',
+    children: 'Hijos',
+    godparents: 'Padrinos',
+    witnesses: 'Testigos (bautismo)',
+    marriageWitnesses: 'Testigos',
+    notes: 'Notas',
+    confidential: 'Persona confidencial',
+    confidentialNote: 'Esta persona está marcada como confidencial — sus datos no se han exportado.',
+    footer: 'Exportación del árbol genealógico TreeMonk',
+    indexTitle: 'Índice de nombres y lugares',
+    nameIndex: 'Índice de nombres',
+    placeIndex: 'Índice de lugares',
+    legend: 'Leyenda: * nacimiento · ~ bautismo · ⚭ matrimonio · † defunción · ▭ entierro · ⌂ residencia',
+    abt: 'hacia',
+    bef: 'antes de',
+    aft: 'después de',
+    illegitimate: 'hijo/a ilegítimo/a'
+  },
+  ru: {
+    title: 'Родословное дерево',
+    generated: 'Создано',
+    people: 'персон',
+    families: 'семей',
+    search: 'Поиск по имени…',
+    index: 'Указатель имён',
+    birth: 'Рождение',
+    christening: 'Крещение',
+    death: 'Смерть',
+    burial: 'Погребение',
+    stillborn: 'мертворождённый',
+    religion: 'Вероисповедание',
+    occupations: 'Профессия',
+    events: 'События жизни',
+    attributes: 'Другие факты',
+    parents: 'Родители',
+    unions: 'Браки / союзы',
+    spouse: 'Супруг(а)',
+    marriage: 'Брак',
+    children: 'Дети',
+    godparents: 'Крёстные',
+    witnesses: 'Свидетели (крещение)',
+    marriageWitnesses: 'Свидетели',
+    notes: 'Заметки',
+    confidential: 'Конфиденциальная персона',
+    confidentialNote: 'Эта персона отмечена как конфиденциальная — её данные не экспортированы.',
+    footer: 'Экспорт родословного дерева TreeMonk',
+    indexTitle: 'Указатель имён и мест',
+    nameIndex: 'Указатель имён',
+    placeIndex: 'Указатель мест',
+    legend: 'Условные обозначения: * рождение · ~ крещение · ⚭ брак · † смерть · ▭ погребение · ⌂ место жительства',
+    abt: 'ок.',
+    bef: 'до',
+    aft: 'после',
+    illegitimate: 'внебрачный ребёнок'
+  },
+  pl: {
+    title: 'Drzewo genealogiczne',
+    generated: 'Wygenerowano',
+    people: 'osób',
+    families: 'rodzin',
+    search: 'Szukaj po nazwisku…',
+    index: 'Indeks nazwisk',
+    birth: 'Urodzony/a',
+    christening: 'Ochrzczony/a',
+    death: 'Zmarły/a',
+    burial: 'Pochowany/a',
+    stillborn: 'martwo urodzony/a',
+    religion: 'Wyznanie',
+    occupations: 'Zawód',
+    events: 'Wydarzenia życiowe',
+    attributes: 'Inne fakty',
+    parents: 'Rodzice',
+    unions: 'Małżeństwa / związki',
+    spouse: 'Małżonek/ka',
+    marriage: 'Ślub',
+    children: 'Dzieci',
+    godparents: 'Rodzice chrzestni',
+    witnesses: 'Świadkowie (chrzest)',
+    marriageWitnesses: 'Świadkowie',
+    notes: 'Notatki',
+    confidential: 'Osoba poufna',
+    confidentialNote: 'Ta osoba jest oznaczona jako poufna — jej dane nie zostały wyeksportowane.',
+    footer: 'Eksport drzewa genealogicznego TreeMonk',
+    indexTitle: 'Indeks nazwisk i miejscowości',
+    nameIndex: 'Indeks nazwisk',
+    placeIndex: 'Indeks miejscowości',
+    legend: 'Legenda: * urodzenie · ~ chrzest · ⚭ ślub · † zgon · ▭ pochówek · ⌂ miejsce zamieszkania',
+    abt: 'ok.',
+    bef: 'przed',
+    aft: 'po',
+    illegitimate: 'dziecko nieślubne'
+  },
+  pt: {
+    title: 'Árvore genealógica',
+    generated: 'Gerado',
+    people: 'pessoas',
+    families: 'famílias',
+    search: 'Pesquisar por nome…',
+    index: 'Índice de nomes',
+    birth: 'Nascimento',
+    christening: 'Batismo',
+    death: 'Falecimento',
+    burial: 'Sepultamento',
+    stillborn: 'natimorto/a',
+    religion: 'Religião',
+    occupations: 'Profissão',
+    events: 'Eventos da vida',
+    attributes: 'Outros fatos',
+    parents: 'Pais',
+    unions: 'Casamentos / uniões',
+    spouse: 'Cônjuge',
+    marriage: 'Casamento',
+    children: 'Filhos',
+    godparents: 'Padrinhos',
+    witnesses: 'Testemunhas (batismo)',
+    marriageWitnesses: 'Testemunhas',
+    notes: 'Notas',
+    confidential: 'Pessoa confidencial',
+    confidentialNote: 'Esta pessoa está marcada como confidencial — os seus dados não foram exportados.',
+    footer: 'Exportação da árvore genealógica TreeMonk',
+    indexTitle: 'Índice de nomes e lugares',
+    nameIndex: 'Índice de nomes',
+    placeIndex: 'Índice de lugares',
+    legend: 'Legenda: * nascimento · ~ batismo · ⚭ casamento · † falecimento · ▭ sepultamento · ⌂ residência',
+    abt: 'cerca de',
+    bef: 'antes de',
+    aft: 'depois de',
+    illegitimate: 'filho/a ilegítimo/a'
   }
 }
 
@@ -138,6 +361,12 @@ function fmtDate(raw: string | null | undefined, l: Record<string, string>, lang
     const [a, b] = [bet[1].trim(), bet[2].trim()]
     if (lang === 'hu') return `${a} és ${b} között`
     if (lang === 'de') return `zwischen ${a} und ${b}`
+    if (lang === 'fr') return `entre ${a} et ${b}`
+    if (lang === 'it') return `tra ${a} e ${b}`
+    if (lang === 'es') return `entre ${a} y ${b}`
+    if (lang === 'ru') return `между ${a} и ${b}`
+    if (lang === 'pl') return `między ${a} a ${b}`
+    if (lang === 'pt') return `entre ${a} e ${b}`
     return `between ${a} and ${b}`
   }
   const q = /^(ABT|BEF|AFT)\.?\s+(.+)$/i.exec(s)
@@ -170,7 +399,7 @@ const yearOf = (d: string | null): string => {
  * couples and children never dangle.
  */
 export function exportSite(filePath: string, langRaw: string, personIds?: string[]): string {
-  const lang: Lang = langRaw === 'hu' || langRaw === 'de' ? langRaw : 'en'
+  const lang = resolveAppLanguage(langRaw)
   const l = L[lang]
   const keep = personIds && personIds.length ? new Set(personIds) : null
   const people = keep ? People.list().filter((p) => keep.has(p.id)) : People.list()
@@ -347,7 +576,7 @@ ${sections}
  */
 /** See {@link exportSite} for `personIds`. */
 export function exportIndexes(filePath: string, langRaw: string, personIds?: string[]): string {
-  const lang: Lang = langRaw === 'hu' || langRaw === 'de' ? langRaw : 'en'
+  const lang = resolveAppLanguage(langRaw)
   const l = L[lang]
   const keep = personIds && personIds.length ? new Set(personIds) : null
   const people = People.list().filter((p) => !p.isPrivate && (!keep || keep.has(p.id)))

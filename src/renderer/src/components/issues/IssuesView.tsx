@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { AlertTriangle, ArrowLeftRight, ArrowRight, CalendarDays, CheckCircle2, EyeOff, GitMerge, Heart, Loader2, MapPin, RefreshCw, ShieldAlert, Bird, SpellCheck, Type, Users, Users2, X, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, ArrowRight, CalendarDays, CheckCircle2, ChevronDown, EyeOff, GitMerge, Heart, Loader2, MapPin, RefreshCw, RotateCcw, ShieldAlert, Bird, SpellCheck, Type, Users, Users2, Wand2, X, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,7 +21,7 @@ import { useDatePlaceholder } from '@/hooks/useDateFormat'
 import { useAppStore } from '@/store/useAppStore'
 import { PersonAvatar } from '@/components/common/PersonAvatar'
 import { fullName, yearOf } from '@/lib/utils'
-import type { DuplicateCandidate, NameGroup, Person, PersonInput, SanityFix, SanityIssue } from '@shared/types'
+import type { DuplicateCandidate, HiddenIssues, NameGroup, Person, PersonInput, SanityFix, SanityIssue } from '@shared/types'
 
 interface CandMeta {
   span: string
@@ -102,7 +102,7 @@ export function IssuesView(): JSX.Element {
   const refreshAll = useAppStore((s) => s.refreshAll)
   const [issues, setIssues] = useState<SanityIssue[]>([])
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<'issues' | 'dups' | 'surnames' | 'givennames'>('issues')
+  const [tab, setTab] = useState<'issues' | 'dups' | 'surnames' | 'givennames' | 'hidden'>('issues')
   const [fixTarget, setFixTarget] = useState<Extract<SanityFix, { kind: 'markDeceased' }> | null>(null)
   const [dismissTarget, setDismissTarget] = useState<SanityIssue | null>(null)
 
@@ -148,6 +148,8 @@ export function IssuesView(): JSX.Element {
   const [chosenSurname, setChosenSurname] = useState<Record<string, string>>({})
   const [chosenGiven, setChosenGiven] = useState<Record<string, string>>({})
   const [normalizing, setNormalizing] = useState<string | null>(null)
+  // Everything the user hid from the scans — its own tab, restorable per entry.
+  const [hidden, setHidden] = useState<HiddenIssues | null>(null)
 
   const scan = useCallback(async () => {
     setLoading(true)
@@ -192,6 +194,56 @@ export function IssuesView(): JSX.Element {
   const scanGiven = useCallback(async () => {
     setGivenGroups(await window.api.names.givenNameVariants())
   }, [])
+
+  const loadHidden = useCallback(async () => {
+    setHidden(await window.api.sanity.hidden())
+  }, [])
+
+  /** "This spelling set is fine as it is" — hide the group, restorable later. */
+  const dismissGroup = useCallback(
+    async (kind: 'surname' | 'given', g: NameGroup): Promise<void> => {
+      await window.api.names.dismissGroup(kind, g.key)
+      if (kind === 'surname') await scanSurnames()
+      else await scanGiven()
+      toast.success(t('issues.groupHidden'))
+    },
+    [scanSurnames, scanGiven, t]
+  )
+
+  /** Un-hide one hidden entry; the relevant scan shows it again. */
+  const restoreHidden = useCallback(
+    async (kind: 'anomaly' | 'nameGroup' | 'merge', key: string): Promise<void> => {
+      await window.api.sanity.restore(kind, key)
+      await loadHidden()
+      if (kind === 'anomaly') await scan()
+      else if (kind === 'merge') await scanDups()
+      else {
+        await scanSurnames()
+        await scanGiven()
+      }
+      toast.success(t('issues.restored'))
+    },
+    [loadHidden, scan, scanDups, scanSurnames, scanGiven, t]
+  )
+
+  /** Batch rename from a FREE search: every person whose field equals `from`
+   *  is rewritten to `to` (audit-logged, undoable like the group unify). */
+  const customRename = useCallback(
+    async (kind: 'surname' | 'given', from: string, to: string): Promise<number> => {
+      const n =
+        kind === 'surname'
+          ? await window.api.names.normalizeSurname([from], to)
+          : await window.api.names.normalizeGivenName([from], to)
+      await refreshAll()
+      if (kind === 'surname') await scanSurnames()
+      else await scanGiven()
+      toast.success(
+        t(kind === 'surname' ? 'issues.surnameNormalized' : 'issues.givenNameNormalized', { count: n, name: to })
+      )
+      return n
+    },
+    [refreshAll, scanSurnames, scanGiven, t]
+  )
 
   const applyNormalize = async (g: NameGroup): Promise<void> => {
     const canonical = chosenSurname[g.key] ?? g.suggested
@@ -336,6 +388,17 @@ export function IssuesView(): JSX.Element {
           label={t('issues.tabGivenNames')}
           count={givenCount}
           tone={givenCount ? 'accent' : 'ok'}
+        />
+        <TabButton
+          active={tab === 'hidden'}
+          onClick={() => {
+            setTab('hidden')
+            void loadHidden()
+          }}
+          icon={<EyeOff className="h-4 w-4" />}
+          label={t('issues.tabHidden')}
+          count={hidden ? hidden.anomalies.length + hidden.nameGroups.length + hidden.merges.length : 0}
+          tone="ok"
         />
       </div>
 
@@ -514,6 +577,11 @@ export function IssuesView(): JSX.Element {
             setChosen={setChosenSurname}
             normalizing={normalizing}
             onApply={applyNormalize}
+            people={people}
+            field={(p) => p.surname}
+            onDismiss={(g) => void dismissGroup('surname', g)}
+            onOpenPerson={selectPerson}
+            onCustomRename={(from, to) => customRename('surname', from, to)}
             icon={<SpellCheck className="h-10 w-10 text-muted-foreground/50" />}
             none={t('issues.surnamesNone')}
             hint={t('issues.surnamesHint')}
@@ -529,6 +597,11 @@ export function IssuesView(): JSX.Element {
             setChosen={setChosenGiven}
             normalizing={normalizing}
             onApply={applyNormalizeGiven}
+            people={people}
+            field={(p) => p.givenName}
+            onDismiss={(g) => void dismissGroup('given', g)}
+            onOpenPerson={selectPerson}
+            onCustomRename={(from, to) => customRename('given', from, to)}
             icon={<Type className="h-10 w-10 text-muted-foreground/50" />}
             none={t('issues.givenNamesNone')}
             hint={t('issues.givenNamesHint')}
@@ -537,6 +610,84 @@ export function IssuesView(): JSX.Element {
             applyLabel={t('issues.givenNameApply')}
           />
         )}
+
+        {/* ---- Hidden entries (dismissed anomalies / name groups / non-duplicates) ---- */}
+        {tab === 'hidden' &&
+          (!hidden || hidden.anomalies.length + hidden.nameGroups.length + hidden.merges.length === 0 ? (
+            <Empty icon={<EyeOff className="h-10 w-10 text-muted-foreground/50" />} text={t('issues.hiddenEmpty')} />
+          ) : (
+            <ScrollArea className="h-full">
+              <div className="space-y-4 p-4 text-xs">
+                {hidden.anomalies.length > 0 && (
+                  <section className="space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {t('issues.hiddenAnomalies')} ({hidden.anomalies.length})
+                    </p>
+                    {hidden.anomalies.map((h) => (
+                      <div key={h.key} className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-secondary/40 p-2">
+                        <span className="font-medium">{t(`issues.rules.${h.rule}`, { defaultValue: h.rule })}</span>
+                        <span className="flex flex-wrap gap-1">
+                          {h.people.map((pp) => (
+                            <button
+                              key={pp.id}
+                              onClick={() => selectPerson(pp.id)}
+                              className="rounded-lg border border-border/40 px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                              {pp.name}
+                            </button>
+                          ))}
+                        </span>
+                        <Button size="sm" variant="outline" className="ml-auto h-6 gap-1 text-[11px]" onClick={() => void restoreHidden('anomaly', h.key)}>
+                          <RotateCcw className="h-3 w-3" /> {t('issues.restore')}
+                        </Button>
+                      </div>
+                    ))}
+                  </section>
+                )}
+                {hidden.nameGroups.length > 0 && (
+                  <section className="space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {t('issues.hiddenNameGroups')} ({hidden.nameGroups.length})
+                    </p>
+                    {hidden.nameGroups.map((h) => (
+                      <div key={h.key} className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-secondary/40 p-2">
+                        <span className="text-muted-foreground">{t(h.kind === 'surname' ? 'issues.tabSurnames' : 'issues.tabGivenNames')}:</span>
+                        <span className="font-medium">{h.variants.join(' · ')}</span>
+                        <Button size="sm" variant="outline" className="ml-auto h-6 gap-1 text-[11px]" onClick={() => void restoreHidden('nameGroup', h.key)}>
+                          <RotateCcw className="h-3 w-3" /> {t('issues.restore')}
+                        </Button>
+                      </div>
+                    ))}
+                  </section>
+                )}
+                {hidden.merges.length > 0 && (
+                  <section className="space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {t('issues.hiddenMerges')} ({hidden.merges.length})
+                    </p>
+                    {hidden.merges.map((h) => (
+                      <div key={h.key} className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-secondary/40 p-2">
+                        <span className="flex flex-wrap gap-1">
+                          {h.people.map((pp) => (
+                            <button
+                              key={pp.id}
+                              onClick={() => selectPerson(pp.id)}
+                              className="rounded-lg border border-border/40 px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            >
+                              {pp.name}
+                            </button>
+                          ))}
+                        </span>
+                        <Button size="sm" variant="outline" className="ml-auto h-6 gap-1 text-[11px]" onClick={() => void restoreHidden('merge', h.key)}>
+                          <RotateCcw className="h-3 w-3" /> {t('issues.restore')}
+                        </Button>
+                      </div>
+                    ))}
+                  </section>
+                )}
+              </div>
+            </ScrollArea>
+          ))}
       </div>
 
       <MarkDeceasedDialog
@@ -649,7 +800,12 @@ function NameNormalizeList({
   hint,
   keepLabel,
   finalLabel,
-  applyLabel
+  applyLabel,
+  people,
+  field,
+  onDismiss,
+  onOpenPerson,
+  onCustomRename
 }: {
   groups: NameGroup[] | null
   chosen: Record<string, string>
@@ -662,11 +818,72 @@ function NameNormalizeList({
   keepLabel: (name: string) => string
   finalLabel: string
   applyLabel: string
+  people: Person[]
+  field: (p: Person) => string
+  onDismiss: (g: NameGroup) => void
+  onOpenPerson: (id: string) => void
+  onCustomRename: (from: string, to: string) => Promise<number>
 }): JSX.Element {
-  if (!groups || groups.length === 0) return <Empty icon={icon} text={none} />
+  const { t } = useTranslation()
+  const [openKey, setOpenKey] = useState<string | null>(null)
+  const [renFrom, setRenFrom] = useState('')
+  const [renTo, setRenTo] = useState('')
+  const [renBusy, setRenBusy] = useState(false)
+  const renCount = renFrom.trim() ? people.filter((p) => field(p).trim() === renFrom.trim()).length : 0
+  const renameBox = (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 p-2 text-xs">
+      <Wand2 className="h-3.5 w-3.5 text-primary" />
+      <span className="font-medium">{t('issues.customRenameTitle')}</span>
+      <input
+        value={renFrom}
+        onChange={(e) => setRenFrom(e.target.value)}
+        placeholder={t('issues.customRenameFrom')}
+        spellCheck={false}
+        className="w-28 rounded-lg border border-border/50 bg-background px-2 py-0.5 outline-none focus:border-primary"
+      />
+      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+      <input
+        value={renTo}
+        onChange={(e) => setRenTo(e.target.value)}
+        placeholder={t('issues.customRenameTo')}
+        spellCheck={false}
+        className="w-28 rounded-lg border border-border/50 bg-background px-2 py-0.5 outline-none focus:border-primary"
+      />
+      <span className={cn('tabular-nums', renCount ? 'text-primary' : 'text-muted-foreground/60')}>
+        {renFrom.trim() ? t('issues.customRenameCount', { count: renCount }) : ''}
+      </span>
+      <Button
+        size="sm"
+        className="ml-auto h-7 gap-1 text-xs"
+        disabled={renBusy || !renCount || !renTo.trim() || renFrom.trim() === renTo.trim()}
+        onClick={() => {
+          setRenBusy(true)
+          void onCustomRename(renFrom.trim(), renTo.trim())
+            .then(() => {
+              setRenFrom('')
+              setRenTo('')
+            })
+            .finally(() => setRenBusy(false))
+        }}
+      >
+        {renBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SpellCheck className="h-3.5 w-3.5" />}
+        {applyLabel}
+      </Button>
+    </div>
+  )
+  if (!groups || groups.length === 0)
+    return (
+      <ScrollArea className="h-full">
+        <div className="space-y-2 p-4">
+          {renameBox}
+          <Empty icon={icon} text={none} />
+        </div>
+      </ScrollArea>
+    )
   return (
     <ScrollArea className="h-full">
       <div className="space-y-2 p-4">
+        {renameBox}
         <p className="text-xs text-muted-foreground">{hint}</p>
         {groups.map((g) => {
           const canonical = chosen[g.key] ?? g.suggested
@@ -705,6 +922,23 @@ function NameNormalizeList({
                 aria-label={finalLabel}
                 className="w-28 rounded-lg border border-primary/40 bg-background px-2 py-0.5 text-xs font-semibold text-primary outline-none focus:border-primary"
               />
+              <button
+                onClick={() => setOpenKey((k) => (k === g.key ? null : g.key))}
+                title={t('issues.affectedTitle')}
+                className="flex items-center gap-1 rounded-lg border border-border/40 px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <ChevronDown className={cn('h-3 w-3 transition-transform', openKey === g.key && 'rotate-180')} />
+                {t('issues.affected', {
+                  count: people.filter((p) => g.variants.some((v) => v.name === field(p).trim()) && field(p).trim() !== canonical).length
+                })}
+              </button>
+              <button
+                onClick={() => onDismiss(g)}
+                title={t('issues.hideGroup')}
+                className="flex h-6 w-6 items-center justify-center rounded-lg border border-border/40 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <EyeOff className="h-3 w-3" />
+              </button>
               <Button
                 size="sm"
                 className="ml-auto h-7 gap-1 text-xs"
@@ -714,6 +948,21 @@ function NameNormalizeList({
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SpellCheck className="h-3.5 w-3.5" />}
                 {applyLabel}
               </Button>
+              {openKey === g.key && (
+                <div className="flex w-full flex-wrap gap-1 border-t border-border/30 pt-1.5">
+                  {people
+                    .filter((p) => g.variants.some((v) => v.name === field(p).trim()) && field(p).trim() !== canonical)
+                    .map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => onOpenPerson(p.id)}
+                        className="rounded-lg border border-border/40 px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      >
+                        {fullName(p)}
+                      </button>
+                    ))}
+                </div>
+              )}
             </div>
           )
         })}

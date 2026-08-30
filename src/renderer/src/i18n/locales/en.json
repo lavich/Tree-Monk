@@ -787,7 +787,22 @@
       "moveParentSlot": "Move to the correct slot",
       "swapDone": "Parents swapped.",
       "moveDone": "Moved to the correct slot."
-    }
+    },
+    "tabHidden": "Hidden",
+    "hiddenEmpty": "Nothing hidden. Whatever you dismiss with “False positive” or the hide button ends up here and can be restored.",
+    "hiddenAnomalies": "Hidden data issues",
+    "hiddenNameGroups": "Hidden name-variant suggestions",
+    "hiddenMerges": "Not duplicates",
+    "restore": "Restore",
+    "restored": "Restored — it will show up in the next scan again.",
+    "groupHidden": "Suggestion hidden — restorable on the Hidden tab.",
+    "hideGroup": "This is fine as it is — hide the suggestion",
+    "affected": "{{count}} affected",
+    "affectedTitle": "Who would be renamed? Click for the list.",
+    "customRenameTitle": "Batch rename",
+    "customRenameFrom": "From…",
+    "customRenameTo": "To…",
+    "customRenameCount": "{{count}} matches"
   },
   "query": {
     "title": "Query Builder",
@@ -1385,7 +1400,8 @@
       "priest": "minister",
       "witness": "witness",
       "undertaker": "undertaker"
-    }
+    },
+    "copyChristeningToBirth": "Use christening date & place as the birth"
   },
   "research": {
     "history": "Research history",
@@ -1686,7 +1702,10 @@
     "confirmPhase1": "The tree structure and core facts download first — sources, notes and photos arrive only at the very end, and that is the longer part.",
     "confirmPhase2": "Place-name unification also runs after the import — until then the same town can temporarily appear more than once in the statistics.",
     "confirmPhase3": "The import runs in the background: keep using the app, just don't close it. You can stop any time — everything imported so far is kept.",
-    "confirmStart": "Start"
+    "confirmStart": "Start",
+    "sessionBadgeExpired": "FS: sign-in needed",
+    "sessionModalTitle": "Your FamilySearch session has expired",
+    "sessionModalBody": "For security, the FamilySearch sign-in expires every 24 hours. Sign in again so sync and import keep working — your data stays available meanwhile, nothing is lost."
   },
   "demo": {
     "introTitle": "Welcome to the TreeMonk demo!",
@@ -1782,7 +1801,7 @@
           },
           {
             "h": "Appearance and language",
-            "p": "In the top bar, the sun/moon icon toggles the light and dark theme, and next to it you set the interface language (Hungarian, English or German)."
+            "p": "In the top bar, the sun/moon icon toggles the light and dark theme, and next to it you set the interface language (Hungarian, English, German, French, Italian, Spanish, Russian, Polish or Portuguese)."
           },
           {
             "h": "Shortcuts",
@@ -2308,7 +2327,7 @@
       "title": "Add plugin",
       "step1Intro": "Before you install, here is what to know:",
       "reqSandbox": "Plugins run in a sandboxed panel: they can only reach the local API with their own scoped token — no external network, so your data cannot leave this machine.",
-      "reqLangs": "A valid plugin provides its description and menu entries in three languages (Hungarian, English, German) — the installer rejects it otherwise.",
+      "reqLangs": "A valid plugin provides its description and menu entries in Hungarian, English and German; French, Italian, Spanish, Russian, Polish and Portuguese are supported when supplied — the installer rejects it without the first three.",
       "reqTheme": "It must follow BOTH light and dark themes — automatic with the official style kit.",
       "reqZip": "A plugin is a single .zip file (with a manifest.json inside). After installing it is listed disabled.",
       "step2Intro": "Pick the plugin's .zip file. The installer validates the manifest — if it is invalid, we show exactly what is wrong.",

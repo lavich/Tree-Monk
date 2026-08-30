@@ -38,6 +38,7 @@ import { useAtlasSettings } from '@/store/useAtlasSettings'
 import { PersonAvatar } from '@/components/common/PersonAvatar'
 import type { AtlasKind, AtlasPoint, Family } from '@shared/types'
 import { PlacesManagerDialog } from './PlacesManagerDialog'
+import { ScopePicker, useScopedPeople } from '@/components/common/ScopePicker'
 import {
   BRANCH_COLOR,
   assignBranches,
@@ -52,7 +53,7 @@ import {
  *
  * A full-bleed MapLibre canvas plotting every geocoded life event as
  * configurable layers (clustered markers / heatmap / migration paths) over
- * swappable basemaps: modern vector (OpenFreeMap), dark raster (Carto), and the
+ * swappable basemaps: modern vector light + dark (OpenFreeMap, key-free), and the
  * OpenHistoricalMap period map whose borders follow the year filter. 3D mode
  * adds terrain, sky and real building extrusions. Focusing one person turns
  * the map into their life journey — everyone else disappears and their stops
@@ -86,27 +87,11 @@ const KINDS: AtlasKind[] = ['birth', 'christening', 'marriage', 'residence', 'de
 // "liberty" carries building heights → real 3D extrusions). The period map is
 // the OpenHistoricalMap style whose features are filtered by year.
 const STYLE_LIGHT = 'https://tiles.openfreemap.org/styles/positron'
+const STYLE_DARK = 'https://tiles.openfreemap.org/styles/dark'
 const STYLE_LIBERTY = 'https://tiles.openfreemap.org/styles/liberty'
 const STYLE_HISTORICAL = historicalStyleRaw as unknown as StyleSpecification
 const OFM_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf'
 const DEM_TILES = ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']
-
-/** Key-free dark raster style (Carto) with a verified glyph endpoint. */
-function darkRasterStyle(): StyleSpecification {
-  return {
-    version: 8,
-    glyphs: OFM_GLYPHS,
-    sources: {
-      base: {
-        type: 'raster',
-        tiles: ['a', 'b', 'c', 'd'].map((s) => `https://${s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png`),
-        tileSize: 256,
-        attribution: '© OpenStreetMap contributors © CARTO'
-      }
-    },
-    layers: [{ id: 'base', type: 'raster', source: 'base' }]
-  }
-}
 
 interface ResolvedStyle {
   key: string
@@ -248,6 +233,18 @@ export function AtlasView(): JSX.Element {
     if (era && atlas.basemap === 'historical') atlas.set({ yearFrom: null, yearTo: era })
   }, [mapFocusPersonId, mapFocusNonce, people])
 
+  // Root-based scope (bloodline / ancestors / descendants ± spouses): the
+  // same circles as the dashboard, applied to whose events get plotted.
+  // "Everyone" with the spouse toggle OFF means the whole tree minus the
+  // married-in world — i.e. the root's blood circle.
+  const effectiveScope = settings.scope === 'all' && !settings.scopeSpouses ? 'blood' : settings.scope
+  const scoped = useScopedPeople(effectiveScope, settings.scopeSpouses)
+  const scopeSet = useMemo(
+    () => (effectiveScope === 'all' ? null : new Set(scoped.people.map((p) => p.id))),
+    [effectiveScope, scoped]
+  )
+  const hasScopeRoot = !!scoped.root
+
   const yearBounds = useMemo(() => {
     let min = Infinity
     let max = -Infinity
@@ -272,12 +269,13 @@ export function AtlasView(): JSX.Element {
       migOn
         ? []
         : points.filter((p) => {
+            if (scopeSet && !scopeSet.has(p.personId)) return false
             if (focusId && p.personId !== focusId) return false
             if (!settings.kinds[p.kind]) return false
             if (!focusId && p.year && (p.year < yFrom || p.year > yTo)) return false
             return true
           }),
-    [points, settings.kinds, yFrom, yTo, focusId, migOn]
+    [points, settings.kinds, yFrom, yTo, focusId, migOn, scopeSet]
   )
 
   const journey = useMemo(() => {
@@ -529,7 +527,7 @@ export function AtlasView(): JSX.Element {
       return { key: 'historical', style: STYLE_HISTORICAL, font: 'OpenHistorical Bold' }
     const dark = b === 'dark' || (b === 'auto' && theme === 'dark')
     if (settings.mode === '3d') return { key: 'liberty', style: STYLE_LIBERTY, font: 'Noto Sans Bold' }
-    if (dark) return { key: 'dark', style: darkRasterStyle(), font: 'Noto Sans Bold' }
+    if (dark) return { key: 'dark', style: STYLE_DARK, font: 'Noto Sans Bold' }
     return { key: 'light', style: STYLE_LIGHT, font: 'Noto Sans Bold' }
   }, [settings.basemap, settings.mode, theme])
   const resolvedRef = useRef(resolved)
@@ -1355,6 +1353,44 @@ export function AtlasView(): JSX.Element {
                 </span>
               </button>
             ))}
+          </section>
+
+          {/* Scope: whose events (everyone / circles around the root person) */}
+          <section className="space-y-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              {t('gedcom.exportScope')}
+            </p>
+            <ScopePicker
+              value={S.scope}
+              onChange={(s) => S.set({ scope: s })}
+              className="flex w-full flex-wrap"
+            />
+            {(
+              <button
+                onClick={() => S.set({ scopeSpouses: !S.scopeSpouses })}
+                disabled={!hasScopeRoot}
+                title={hasScopeRoot ? t('dashboard.includeSpousesHint') : t('dashboard.scopeNeedsRoot')}
+                className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-xs transition-colors hover:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Heart className={cn('h-3.5 w-3.5', S.scopeSpouses ? 'text-primary' : 'text-muted-foreground/60')} />
+                <span className={cn('flex-1 text-left', !S.scopeSpouses && 'text-muted-foreground')}>
+                  {t('dashboard.includeSpouses')}
+                </span>
+                <span
+                  className={cn(
+                    'relative h-4 w-7 rounded-full transition-colors',
+                    S.scopeSpouses ? 'bg-primary/80' : 'bg-secondary'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all',
+                      S.scopeSpouses ? 'left-3.5' : 'left-0.5'
+                    )}
+                  />
+                </span>
+              </button>
+            )}
           </section>
 
           {/* Event kinds */}

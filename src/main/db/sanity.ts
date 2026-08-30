@@ -1,40 +1,21 @@
-import { DismissedIssues, Families, People } from './repo'
+import { AppSettings, DismissedIssues, Families, People } from './repo'
+import { dismissedNameGroups } from './nameNormalize'
+import { listDismissedMerges, restoreMerge } from './duplicates'
 import { getDb } from './connection'
 import type { Person, SanityFix, SanityIssue } from '@shared/types'
+import { monthNumber } from '@shared/months'
 
 /**
- * Month name → 1–12. Covers full names AND abbreviations in English, Hungarian
- * and German, because FamilySearch / GEDCOM dates arrive in many shapes:
- * "11 JAN 1906", "1. Januar 1907", "1850. április", "March 1900", "1900-03-01".
- * Each registered name also auto-adds its 3-letter prefix (the GEDCOM abbrev),
- * so "Jan", "Jän", "Már", "Szep" etc. all resolve too.
+ * Month name → 1–12 in English, Hungarian, German and French. FamilySearch /
+ * GEDCOM dates arrive in many shapes, including full names and abbreviations.
  */
-const MONTH_TOKENS: Record<string, number> = {}
-const addMonth = (n: number, ...names: string[]): void => {
-  for (const name of names) {
-    MONTH_TOKENS[name] = n
-    const p = name.slice(0, 3)
-    if (MONTH_TOKENS[p] === undefined) MONTH_TOKENS[p] = n
-  }
-}
-addMonth(1, 'january', 'januar', 'január', 'jänner')
-addMonth(2, 'february', 'februar', 'február')
-addMonth(3, 'march', 'märz', 'marz', 'március', 'marcius')
-addMonth(4, 'april', 'április', 'aprilis')
-addMonth(5, 'may', 'mai', 'május', 'majus')
-addMonth(6, 'june', 'juni', 'június', 'junius')
-addMonth(7, 'july', 'juli', 'július', 'julius')
-addMonth(8, 'august', 'augusztus')
-addMonth(9, 'september', 'szeptember', 'sept')
-addMonth(10, 'october', 'oktober', 'október')
-addMonth(11, 'november')
-addMonth(12, 'december', 'dezember')
-
 /** The month (1–12) named anywhere in a free-form date, or null. Splits on
- *  non-letters so "11 JAN 1906", "1. Januar 1907" and "1850. április" all work. */
+ * non-letters so "11 JAN 1906", "1. Januar 1907", "1850. április" and
+ * "12 janvier 1850" all work. */
 function monthIndex(date: string): number | null {
   for (const tok of date.toLowerCase().split(/[^\p{L}]+/u)) {
-    if (tok && MONTH_TOKENS[tok] !== undefined) return MONTH_TOKENS[tok]
+    const month = monthNumber(tok)
+    if (month !== null) return month
   }
   return null
 }
@@ -103,8 +84,43 @@ function isUnparsableDate(date: string | null): boolean {
   return !/\b\d{4}\b/.test(date)
 }
 
+/** Display name in the stored UI language's order (hu: surname first). */
 function name(p: Person): string {
-  return `${p.givenName} ${p.surname}`.trim() || '—'
+  const hu = (AppSettings.get('app_language') ?? '').startsWith('hu')
+  const composed = hu ? `${p.surname} ${p.givenName}` : `${p.givenName} ${p.surname}`
+  return composed.trim() || '—'
+}
+
+/** Everything the user hid from the scans — anomalies, name-variant groups and
+ *  "not a duplicate" pairs — resolvable back one by one. */
+export function hiddenIssues(): {
+  anomalies: { key: string; rule: string; people: { id: string; name: string }[] }[]
+  nameGroups: { key: string; kind: 'surname' | 'given'; variants: string[] }[]
+  merges: { key: string; people: { id: string; name: string }[] }[]
+} {
+  const personRef = (id: string): { id: string; name: string } => {
+    const p = People.get(id)
+    return { id, name: p ? name(p) : id }
+  }
+  const anomalies = DismissedIssues.list()
+    .filter((k) => !k.startsWith('namevar|'))
+    .map((key) => {
+      const bar = key.indexOf('|')
+      const rule = bar === -1 ? key : key.slice(0, bar)
+      const ids = bar === -1 ? [] : key.slice(bar + 1).split(',').filter(Boolean)
+      return { key, rule, people: ids.map(personRef) }
+    })
+  const merges = listDismissedMerges().map((key) => ({
+    key,
+    people: key.split('|').filter(Boolean).map(personRef)
+  }))
+  return { anomalies, nameGroups: dismissedNameGroups(), merges }
+}
+
+/** Un-hide one entry; it reappears in the next scan of its kind. */
+export function restoreHidden(kind: 'anomaly' | 'nameGroup' | 'merge', key: string): void {
+  if (kind === 'merge') restoreMerge(key)
+  else DismissedIssues.remove(key)
 }
 
 let counter = 0

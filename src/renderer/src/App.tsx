@@ -38,6 +38,9 @@ import { FamilySearchDialog } from '@/components/settings/FamilySearchDialog'
 import { clearStartChoice, fsArrivedNoticeSeen, isFsMode, markReimportNoticeSeen, markStartChoiceSeen, setFsMode, startChoiceSeen } from '@/lib/fsMode'
 import { isFamilySearchId } from '@/lib/familySearchSearch'
 import { ReimportNoticeDialog } from '@/components/common/ReimportNoticeDialog'
+import { FsSessionDialog } from '@/components/common/FsSessionDialog'
+import { useFsSession } from '@/hooks/useFsSession'
+import { FS_SESSION_REQUIRED_EVENT } from '@/lib/fsSession'
 import { isDemo } from '@/lib/demo'
 import { PersonPanel } from '@/components/person/PersonPanel'
 import { Preloader } from '@/components/common/Preloader'
@@ -209,6 +212,25 @@ export default function App(): JSX.Element {
     setReimportOpen(true)
   }, [ready])
 
+  // Expired FamilySearch session (FS-mode tree, 24h token lapsed): pop the
+  // sign-in modal ONCE per app run — afterwards the amber topbar badge keeps
+  // reminding until they sign in.
+  const { status: fsSession, recheck: recheckFsSession } = useFsSession()
+  const [fsSessionOpen, setFsSessionOpen] = useState(false)
+  const fsSessionPrompted = useRef(false)
+  useEffect(() => {
+    if (!ready || fsSession !== 'expired' || fsSessionPrompted.current) return
+    fsSessionPrompted.current = true
+    setFsSessionOpen(true)
+  }, [ready, fsSession])
+  // A user-initiated FS action (sync, expand, scan…) hit the expired session:
+  // always pop the dialog, even if the startup prompt was already shown.
+  useEffect(() => {
+    const openIt = (): void => setFsSessionOpen(true)
+    window.addEventListener(FS_SESSION_REQUIRED_EVENT, openIt)
+    return () => window.removeEventListener(FS_SESSION_REQUIRED_EVENT, openIt)
+  }, [])
+
   // The "FamilySearch connection is in development" notice is GONE: the
   // integration shipped, so announcing it as upcoming would be wrong. The
   // fsAnnounce IPC + seen-flag stay in place so existing installs (which may
@@ -326,6 +348,7 @@ export default function App(): JSX.Element {
           dismissed, so a fresh install never gets two stacked modals. */}
       <StartModeDialog open={startOpen && !reimportOpen} onOpenChange={setStartOpen} onChooseFs={() => setFsHubOpen(true)} />
         <ReimportNoticeDialog open={reimportOpen} onOpenChange={setReimportOpen} />
+        <FsSessionDialog open={fsSessionOpen} onOpenChange={setFsSessionOpen} onSignedIn={() => void recheckFsSession()} />
         <FamilySearchDialog open={fsHubOpen} onOpenChange={setFsHubOpen} mandatory />
         <Toaster theme={theme} position="bottom-right" richColors />
       </div>

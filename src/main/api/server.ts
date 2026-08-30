@@ -18,13 +18,15 @@ import {
   Occupations,
   People,
   Places,
-  ResearchLogs
+  Repositories,
+  ResearchLogs,
+  Sources
 } from '../db/repo'
-import { resolveMediaPath } from '../db/connection'
+import { getDb, resolveMediaPath } from '../db/connection'
 import { buildPedigree } from '../db/pedigree'
 import { buildAtlasPoints } from '../db/atlasData'
 import { exportGedcom } from '../gedcom/export'
-import type { ApiServerConfig, ApiServerStatus, EventRecord, FamilyInput, PersonInput } from '@shared/types'
+import type { ApiServerConfig, ApiServerStatus, Citation, EventRecord, FamilyInput, PersonInput } from '@shared/types'
 import { DOCS_HTML } from './docs'
 import { anyPluginEnabled, pluginScopesForToken } from '../plugins'
 
@@ -141,6 +143,10 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
+function requireFamily(id: string): void {
+  if (!Families.get(id)) throw new ApiError(404, 'Family not found')
+}
+
 function requirePerson(id: string): void {
   if (!People.get(id)) throw new ApiError(404, 'Person not found')
 }
@@ -188,6 +194,167 @@ function pick<T extends object>(body: unknown, fields: (keyof T)[]): Partial<T> 
   const out: Record<string, unknown> = {}
   for (const f of fields) if (f in src) out[f as string] = src[f as string]
   return out as Partial<T>
+}
+
+/** externalId (the caller's stable id) rides in the gedcomId column — the same
+ *  slot GEDCOM imports use — so external captures and file imports share one
+ *  dedup namespace. */
+function externalIdOf(b: Record<string, unknown>): string | null {
+  const v = b.externalId ?? b.gedcomId
+  return typeof v === 'string' && v.trim() ? v.trim() : null
+}
+
+function upsertRepository(b: Record<string, unknown>): unknown {
+  const name = typeof b.name === 'string' ? b.name.trim() : ''
+  if (!name) throw new ApiError(400, 'Repository "name" is required')
+  return Repositories.upsert({
+    gedcomId: externalIdOf(b),
+    name,
+    address: typeof b.address === 'string' ? b.address : null
+  })
+}
+
+function upsertSource(b: Record<string, unknown>): unknown {
+  const title = typeof b.title === 'string' ? b.title.trim() : ''
+  if (!title) throw new ApiError(400, 'Source "title" is required')
+  const repositoryId = typeof b.repositoryId === 'string' ? b.repositoryId : null
+  if (repositoryId && !Repositories.list().some((r) => r.id === repositoryId))
+    throw new ApiError(404, 'repositoryId does not exist')
+  return Sources.upsert({
+    gedcomId: externalIdOf(b),
+    title,
+    author: typeof b.author === 'string' ? b.author : null,
+    publication: typeof b.publication === 'string' ? b.publication : null,
+    repositoryId,
+    text: typeof b.text === 'string' ? b.text : null,
+    recordDate: typeof b.recordDate === 'string' ? b.recordDate : null
+  })
+}
+
+/** Citation on a person or family; `eventTag` binds it to a fact (BIRT, CHR,
+ *  MARR, …) exactly like GEDCOM-imported citations. The scan permalink usually
+ *  travels in `note` (or `page`). */
+function createCitation(
+  ownerType: 'person' | 'family',
+  ownerId: string,
+  b: Record<string, unknown>
+): Citation {
+  const sourceId = typeof b.sourceId === 'string' ? b.sourceId : ''
+  if (!sourceId) throw new ApiError(400, 'Citation "sourceId" is required')
+  if (!Sources.list().some((src) => src.id === sourceId))
+    throw new ApiError(404, 'sourceId does not exist')
+  return Citations.create({
+    sourceId,
+    ownerType,
+    ownerId,
+    eventTag: typeof b.eventTag === 'string' && b.eventTag.trim() ? b.eventTag.trim().toUpperCase() : null,
+    page: typeof b.page === 'string' ? b.page : null,
+    quality: typeof b.quality === 'string' ? b.quality : null,
+    note: typeof b.note === 'string' ? b.note : null
+  })
+}
+
+/**
+ * One capture = one atomic transaction. Operations run in order inside a
+ * single SQLite transaction (any failure rolls the whole batch back), and a
+ * later operation references an earlier result's id as "$ref":
+ *
+ *   { "operations": [
+ *     { "op": "repository.upsert", "ref": "archive", "data": { "externalId": "…", "name": "…" } },
+ *     { "op": "source.upsert",     "ref": "book",    "data": { "externalId": "…", "title": "…", "repositoryId": "$archive" } },
+ *     { "op": "person.create",     "ref": "p",       "data": { "givenName": "…", "surname": "…" } },
+ *     { "op": "event.create",                        "data": { "ownerType": "person", "ownerId": "$p", "type": "baptism", "date": "1850" } },
+ *     { "op": "citation.create",                     "data": { "ownerType": "person", "ownerId": "$p", "sourceId": "$book", "eventTag": "CHR", "page": "fol. 23" } }
+ *   ] }
+ */
+const BATCH_MAX_OPS = 100
+function runBatch(body: Record<string, unknown>): unknown {
+  const ops = body.operations
+  if (!Array.isArray(ops) || ops.length === 0) throw new ApiError(400, '"operations" must be a non-empty array')
+  if (ops.length > BATCH_MAX_OPS) throw new ApiError(400, `At most ${BATCH_MAX_OPS} operations per batch`)
+
+  const refs = new Map<string, string>()
+  const resolve = (v: unknown): unknown => {
+    if (typeof v === 'string' && v.startsWith('$')) {
+      const id = refs.get(v.slice(1))
+      if (!id) throw new ApiError(400, `Unknown reference "${v}" — refs must be defined by an earlier operation`)
+      return id
+    }
+    if (Array.isArray(v)) return v.map(resolve)
+    if (v && typeof v === 'object')
+      return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, resolve(x)]))
+    return v
+  }
+
+  const results: { op: string; ref: string | null; id: string }[] = []
+  const run = getDb().transaction(() => {
+    ops.forEach((raw, i) => {
+      const opName = typeof (raw as Record<string, unknown>)?.op === 'string' ? String((raw as Record<string, unknown>).op) : ''
+      try {
+        const data = resolve((raw as Record<string, unknown>).data ?? {}) as Record<string, unknown>
+        let id: string
+        switch (opName) {
+          case 'repository.upsert':
+            id = (upsertRepository(data) as { id: string }).id
+            break
+          case 'source.upsert':
+            id = (upsertSource(data) as { id: string }).id
+            break
+          case 'person.create':
+            id = People.create(pick<PersonInput>(data, PERSON_FIELDS)).id
+            break
+          case 'person.update': {
+            const pid = String(data.id ?? '')
+            if (!People.get(pid)) throw new ApiError(404, 'Person not found')
+            id = People.update(pid, pick<PersonInput>(data, PERSON_FIELDS)).id
+            break
+          }
+          case 'family.create':
+            id = Families.create(pick<FamilyInput>(data, FAMILY_FIELDS)).id
+            break
+          case 'family.update': {
+            const fid = String(data.id ?? '')
+            if (!Families.get(fid)) throw new ApiError(404, 'Family not found')
+            id = Families.update(fid, pick<FamilyInput>(data, FAMILY_FIELDS)).id
+            break
+          }
+          case 'event.create': {
+            const ownerType = data.ownerType === 'family' ? 'family' : 'person'
+            const ownerId = String(data.ownerId ?? '')
+            if (ownerType === 'person') requirePerson(ownerId)
+            else requireFamily(ownerId)
+            id = Events.create(ownerType, ownerId, {
+              type: String(data.type ?? 'other'),
+              date: (data.date as string | undefined) ?? null,
+              endDate: (data.endDate as string | undefined) ?? null,
+              place: (data.place as string | undefined) ?? null,
+              value: (data.value as string | undefined) ?? null,
+              note: (data.note as string | undefined) ?? null
+            }).id
+            break
+          }
+          case 'citation.create': {
+            const ownerType = data.ownerType === 'family' ? 'family' : 'person'
+            const ownerId = String(data.ownerId ?? '')
+            if (ownerType === 'person') requirePerson(ownerId)
+            else requireFamily(ownerId)
+            id = createCitation(ownerType, ownerId, data).id
+            break
+          }
+          default:
+            throw new ApiError(400, `Unknown op "${opName}"`)
+        }
+        const ref = typeof (raw as Record<string, unknown>).ref === 'string' ? String((raw as Record<string, unknown>).ref) : null
+        if (ref) refs.set(ref, id)
+        results.push({ op: opName, ref, id })
+      } catch (e) {
+        const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'failed'
+        throw new ApiError(e instanceof ApiError ? e.code : 400, `operations[${i}] (${opName || '?'}): ${msg}`)
+      }
+    })
+  })
+  run()
+  return { results }
 }
 
 interface Route {
@@ -377,6 +544,98 @@ const routes: Route[] = [
       requirePerson(id)
       return Citations.forOwner('person', id)
     }
+  },
+  // ---- Source / repository / citation writes (external capture tools) ------
+  // External research tools (e.g. church-book citation helpers) create the
+  // register, the archive and the page-level citation in one flow. Dedup runs
+  // on `externalId`: the caller's own stable id is stored as the record's
+  // gedcomId, so re-sending the same capture is idempotent.
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/repositories$/,
+    handler: () => Repositories.list()
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/repositories$/,
+    write: true,
+    handler: async (req) => upsertRepository((await readBody(req)) as Record<string, unknown>)
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/sources$/,
+    handler: (_r, _p, query) => {
+      const q = (query.get('q') ?? '').trim().toLowerCase()
+      let list = Sources.list()
+      if (q)
+        list = list.filter((src) =>
+          `${src.title} ${src.author ?? ''} ${src.gedcomId ?? ''}`.toLowerCase().includes(q)
+        )
+      return list
+    }
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/sources$/,
+    write: true,
+    handler: async (req) => upsertSource((await readBody(req)) as Record<string, unknown>)
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/people\/([^/]+)\/citations$/,
+    write: true,
+    handler: async (req, [id]) => {
+      requirePerson(id)
+      return createCitation('person', id, (await readBody(req)) as Record<string, unknown>)
+    }
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/families\/([^/]+)\/citations$/,
+    handler: (_r, [id]) => {
+      requireFamily(id)
+      return Citations.forOwner('family', id)
+    }
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/families\/([^/]+)\/citations$/,
+    write: true,
+    handler: async (req, [id]) => {
+      requireFamily(id)
+      return createCitation('family', id, (await readBody(req)) as Record<string, unknown>)
+    }
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/v1\/families\/([^/]+)\/events$/,
+    handler: (_r, [id]) => {
+      requireFamily(id)
+      return Events.forOwner('family', id)
+    }
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/families\/([^/]+)\/events$/,
+    write: true,
+    handler: async (req, [id]) => {
+      requireFamily(id)
+      const b = (await readBody(req)) as Partial<EventRecord>
+      return Events.create('family', id, {
+        type: String(b.type ?? 'other'),
+        date: b.date ?? null,
+        endDate: b.endDate ?? null,
+        place: b.place ?? null,
+        value: b.value ?? null,
+        note: b.note ?? null
+      })
+    }
+  },
+  {
+    method: 'POST',
+    pattern: /^\/api\/v1\/batch$/,
+    write: true,
+    handler: async (req) => runBatch((await readBody(req)) as Record<string, unknown>)
   },
   {
     method: 'GET',
@@ -618,7 +877,44 @@ function buildOpenApi(cfg: ApiConfig): unknown {
         get: p('Documents attached to a person', { params: [idParam] })
       },
       '/api/v1/people/{id}/citations': {
-        get: p('Source citations of a person (source title/author/text, event tag, quality)', { params: [idParam] })
+        get: p('Source citations of a person (source title/author/text, event tag, quality)', { params: [idParam] }),
+        post: p('Add a citation to a person — sourceId, eventTag (BIRT/CHR/MARR/…), page, quality, note', {
+          write: true,
+          params: [idParam],
+          body: true
+        })
+      },
+      '/api/v1/families/{id}/citations': {
+        get: p('Source citations of a family (marriage records etc.)', { params: [idParam] }),
+        post: p('Add a citation to a family — sourceId, eventTag (usually MARR), page, quality, note', {
+          write: true,
+          params: [idParam],
+          body: true
+        })
+      },
+      '/api/v1/families/{id}/events': {
+        get: p('Family (union) events — marriage-related events belong to the couple', { params: [idParam] }),
+        post: p('Add a family event — type, date, place, note', { write: true, params: [idParam], body: true })
+      },
+      '/api/v1/repositories': {
+        get: p('List repositories (archives)'),
+        post: p('Create/update a repository — name, address; "externalId" makes the call idempotent', {
+          write: true,
+          body: true
+        })
+      },
+      '/api/v1/sources': {
+        get: p('List sources', { params: [{ name: 'q', in: 'query', schema: { type: 'string' } }] }),
+        post: p('Create/update a source — title, author, publication (link), repositoryId, text, recordDate; "externalId" makes the call idempotent', {
+          write: true,
+          body: true
+        })
+      },
+      '/api/v1/batch': {
+        post: p('Run up to 100 operations in ONE atomic transaction; later ops reference earlier results via "$ref". Ops: repository.upsert, source.upsert, person.create/update, family.create/update, event.create, citation.create', {
+          write: true,
+          body: true
+        })
       },
       '/api/v1/people/{id}/occupations': {
         get: p('Occupations of a person (time-scoped)', { params: [idParam] })

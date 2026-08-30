@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { AtlasKind } from '@shared/types'
+import type { DashboardScope } from '@/lib/dashboardScope'
 
 /** Basemap choices — 'auto' follows the app theme (light/dark). */
 export type AtlasBasemap = 'auto' | 'light' | 'dark' | 'historical'
@@ -18,6 +19,12 @@ export interface AtlasSettings {
   /** Year window (null = open end). */
   yearFrom: number | null
   yearTo: number | null
+  /** Whose events to plot: everyone, or a circle around the tree's root
+   *  person (bloodline / ancestors / descendants) — same semantics as the
+   *  dashboard and the People page. */
+  scope: DashboardScope
+  /** Include married-in spouses when a root-based scope is active. */
+  scopeSpouses: boolean
   set: (patch: Partial<Omit<AtlasSettings, 'set' | 'setKind'>>) => void
   setKind: (kind: AtlasKind, on: boolean) => void
 }
@@ -43,7 +50,9 @@ const DEFAULTS = {
   cluster: true,
   kinds: DEFAULT_KINDS,
   yearFrom: null,
-  yearTo: null
+  yearTo: null,
+  scope: 'all' as DashboardScope,
+  scopeSpouses: true
 }
 
 function load(): typeof DEFAULTS {

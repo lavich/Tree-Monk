@@ -930,7 +930,14 @@ export interface PluginPanelInfo {
   apiBase: string
 }
 
-export type AppLanguage = 'hu' | 'en' | 'de'
+export type AppLanguage = 'hu' | 'en' | 'de' | 'fr' | 'it' | 'es' | 'ru' | 'pl' | 'pt'
+
+/** Everything the user hid from the data-issue scans, restorable one by one. */
+export interface HiddenIssues {
+  anomalies: { key: string; rule: string; people: { id: string; name: string }[] }[]
+  nameGroups: { key: string; kind: 'surname' | 'given'; variants: string[] }[]
+  merges: { key: string; people: { id: string; name: string }[] }[]
+}
 
 // ---- Printable tree export ----
 

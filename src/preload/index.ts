@@ -190,7 +190,9 @@ const api: TreeMonkApi = {
   },
   sanity: {
     check: () => ipcRenderer.invoke(Channels.sanity.check),
-    dismiss: (key) => ipcRenderer.invoke(Channels.sanity.dismiss, key)
+    dismiss: (key) => ipcRenderer.invoke(Channels.sanity.dismiss, key),
+    hidden: () => ipcRenderer.invoke(Channels.sanity.hidden),
+    restore: (kind, key) => ipcRenderer.invoke(Channels.sanity.restore, kind, key)
   },
   relationship: {
     find: (fromId, toId) => ipcRenderer.invoke(Channels.relationship.find, fromId, toId)
@@ -285,7 +287,7 @@ const api: TreeMonkApi = {
   app: {
     setLanguage: (lang) => ipcRenderer.invoke(Channels.app.setLanguage, lang),
     openExternal: (url) => ipcRenderer.invoke(Channels.app.openExternal, url),
-    openManual: () => ipcRenderer.invoke(Channels.app.openManual)
+    openManual: (language) => ipcRenderer.invoke(Channels.app.openManual, language)
   },
   updates: {
     version: () => ipcRenderer.invoke(Channels.updates.version),
@@ -322,7 +324,8 @@ const api: TreeMonkApi = {
       ipcRenderer.invoke(Channels.names.normalizeSurname, variants, canonical),
     givenNameVariants: () => ipcRenderer.invoke(Channels.names.givenNameVariants),
     normalizeGivenName: (variants, canonical) =>
-      ipcRenderer.invoke(Channels.names.normalizeGivenName, variants, canonical)
+      ipcRenderer.invoke(Channels.names.normalizeGivenName, variants, canonical),
+    dismissGroup: (kind, key) => ipcRenderer.invoke(Channels.names.dismissGroup, kind, key)
   },
   supportInvite: {
     status: () => ipcRenderer.invoke(Channels.supportInvite.status),

@@ -67,8 +67,7 @@ import type {
   TreeExportPayload,
   TreeExportResult,
   TreeNodeDatum,
-  Workspace
-} from './types'
+  Workspace, HiddenIssues } from './types'
 
 /** Every IPC channel name, namespaced by domain. */
 export const Channels = {
@@ -233,7 +232,9 @@ export const Channels = {
   },
   sanity: {
     check: 'sanity:check',
-    dismiss: 'sanity:dismiss'
+    dismiss: 'sanity:dismiss',
+    hidden: 'sanity:hidden',
+    restore: 'sanity:restore'
   },
   relationship: {
     find: 'relationship:find'
@@ -342,7 +343,8 @@ export const Channels = {
     surnameVariants: 'names:surnameVariants',
     normalizeSurname: 'names:normalizeSurname',
     givenNameVariants: 'names:givenNameVariants',
-    normalizeGivenName: 'names:normalizeGivenName'
+    normalizeGivenName: 'names:normalizeGivenName',
+    dismissGroup: 'names:dismissGroup'
   },
   supportInvite: {
     status: 'supportInvite:status',
@@ -578,6 +580,10 @@ export interface TreeMonkApi {
     check(): Promise<SanityIssue[]>
     /** Hide an anomaly permanently (false positive). `key` comes from the issue. */
     dismiss(key: string): Promise<void>
+    /** Everything hidden from the scans (anomalies, name groups, non-duplicates). */
+    hidden(): Promise<HiddenIssues>
+    /** Un-hide one entry so the next scan shows it again. */
+    restore(kind: 'anomaly' | 'nameGroup' | 'merge', key: string): Promise<void>
   }
   relationship: {
     /** Shortest kinship path between two people (null if unrelated). */
@@ -728,8 +734,8 @@ export interface TreeMonkApi {
   app: {
     /** Open an external http(s) URL in the default browser. */
     openExternal(url: string): Promise<void>
-    /** Open the bundled user-manual PDF in the OS viewer. Resolves false if missing. */
-    openManual(): Promise<boolean>
+    /** Open the bundled user manual in the selected language. Resolves false if missing. */
+    openManual(language?: string): Promise<boolean>
     /** Tell the main process the current UI language (drives geocoding output). */
     setLanguage(lang: string): Promise<void>
   }
@@ -789,6 +795,8 @@ export interface TreeMonkApi {
     givenNameVariants(): Promise<NameGroup[]>
     /** Rewrite the given first-name variants to `canonical`; returns people changed. */
     normalizeGivenName(variants: string[], canonical: string): Promise<number>
+    /** Hide a variant group ("this spelling set is fine") — restorable. */
+    dismissGroup(kind: 'surname' | 'given', key: string): Promise<void>
   }
   supportInvite: {
     /** True once the one-time support invitation has been seen (never again). */

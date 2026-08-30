@@ -64,6 +64,12 @@ function defaultTreeName(): string {
   const loc = (app.getLocale() || 'en').toLowerCase()
   if (loc.startsWith('hu')) return 'Családfa'
   if (loc.startsWith('de')) return 'Stammbaum'
+  if (loc.startsWith('fr')) return 'Arbre généalogique'
+  if (loc.startsWith('it')) return 'Albero genealogico'
+  if (loc.startsWith('es')) return 'Árbol genealógico'
+  if (loc.startsWith('ru')) return 'Родословное дерево'
+  if (loc.startsWith('pl')) return 'Drzewo genealogiczne'
+  if (loc.startsWith('pt')) return 'Árvore genealógica'
   return 'Family Tree'
 }
 

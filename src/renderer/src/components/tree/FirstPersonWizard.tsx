@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, Sprout, UserRound } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { formatName, cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -174,7 +174,7 @@ export function FirstPersonWizard({
             <div className="flex items-center gap-2.5 rounded-xl border border-border bg-secondary/40 p-3">
               <UserRound className="h-5 w-5 shrink-0 text-primary" />
               <p className="min-w-0 truncate text-sm font-semibold">
-                {`${created.givenName} ${created.surname}`.trim()}
+                {formatName(created.givenName, created.surname)}
               </p>
             </div>
             <p className="text-xs text-muted-foreground">{t('firstPerson.doneBody')}</p>
